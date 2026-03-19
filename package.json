@@ -1,0 +1,65 @@
+{
+  "name": "hugr",
+  "version": "0.1.0",
+  "description": "Multi-agent orchestration framework for Claude Code. Define pipelines, compose agents, and run iterative coding sessions.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "multi-agent",
+    "orchestration",
+    "claude",
+    "claude-code",
+    "ai-agents",
+    "pipeline",
+    "coding-agents",
+    "llm"
+  ],
+  "author": "willi8md",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/willi8md/hugr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/willi8md/hugr/issues"
+  },
+  "homepage": "https://github.com/willi8md/hugr#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.37",
+    "yaml": "^2.8.2"
+  }
+}
