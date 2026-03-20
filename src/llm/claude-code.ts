@@ -20,103 +20,23 @@ import type {
 
 import { TIMEOUTS, SESSION_LIMIT_PATTERNS, detectSessionLimit } from '../constants.js';
 import { resolveSessionDataDir } from '../paths.js';
-import type { LLMProvider, CompletionOptions, CompletionResult } from '../types/llm.js';
+import type { LLMProvider, CompletionOptions, CompletionResult, ExecuteOptions, ExecuteResult, StreamActivity, FileChange } from '../types/llm.js';
 
 export type { CanUseTool } from '@anthropic-ai/claude-agent-sdk';
+export type { ExecuteOptions, ExecuteResult, StreamActivity, FileChange } from '../types/llm.js';
 
 export interface ClaudeCodeConfig {
     cliPath?: string;
     queryTimeout?: number;
     executeTimeout?: number;
     maxRetries?: number;
-
     model?: string;
-
     timeout?: number;
 }
 
 export interface QueryResult {
     text: string;
     durationMs: number;
-}
-
-export interface FileChange {
-    path: string;
-    action: 'created' | 'modified' | 'deleted';
-}
-
-export interface ExecuteResult {
-    success: boolean;
-    durationMs: number;
-    filesChanged: string[];
-
-    fileChanges: FileChange[];
-    transcript?: string;
-    error?: string;
-
-    costUsd?: number;
-
-    tokenUsage?: { input_tokens: number; output_tokens: number };
-
-    numTurns?: number;
-
-    sessionId?: string;
-
-    sessionLimited?: boolean;
-
-    resetTime?: string;
-}
-
-export interface StreamActivity {
-    type: 'thinking' | 'text' | 'tool_start' | 'tool_end' | 'tool_progress' | 'tool_summary' | 'error' | 'result';
-    content: string;
-    toolName?: string;
-    timestamp: Date;
-
-    displayInput?: string;
-
-    elapsedSeconds?: number;
-
-    stat?: string;
-
-    tokenUsage?: { input: number; output: number };
-}
-
-export interface ExecuteOptions {
-    workdir: string;
-    task: string;
-    context?: string;
-    timeout?: number;
-    autoAccept?: boolean;
-
-    sessionProjectPath?: string;
-
-    onActivity?: (activity: StreamActivity) => void;
-
-    agentTeams?: boolean;
-
-    skipGitTracking?: boolean;
-
-    skillContent?: string;
-
-    allowedTools?: string[];
-
-    maxTurns?: number;
-
-    canUseTool?: CanUseTool;
-
-    resume?: string;
-
-    onSessionInit?: (sessionId: string) => void;
-
-    images?: Array<{
-        id: string;
-        name: string;
-        mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
-        base64: string;
-    }>;
-
-    filePaths?: string[];
 }
 
 export interface LimitCheckResult {
@@ -477,7 +397,7 @@ export class ClaudeCodeProvider implements LLMProvider {
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
         const wrappedCanUseTool: CanUseTool | undefined = options.canUseTool
-            ? async (toolName, input, ctx) => {
+            ? (async (toolName: string, input: Record<string, unknown>, ctx: { signal: AbortSignal }) => {
 
                 if (timeoutHandle) {
                     clearTimeout(timeoutHandle);
@@ -501,7 +421,7 @@ export class ClaudeCodeProvider implements LLMProvider {
                         }, remaining);
                     }
                 }
-            }
+            }) as unknown as CanUseTool
             : undefined;
 
         const toolList = buildAllowedTools(options);

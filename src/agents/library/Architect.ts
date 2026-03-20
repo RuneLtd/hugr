@@ -5,8 +5,7 @@ import { join } from 'node:path';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider } from '../../types/llm.js';
-import { ClaudeCodeProvider, type CanUseTool, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
 import { detectSessionLimit } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { ArchitectMode } from '../../config/schema.js';
@@ -24,7 +23,7 @@ export interface ArchitectActivity {
 
 export interface ArchitectConfig {
     joblog: Joblog;
-    provider: ClaudeCodeProvider;
+    provider: LLMProvider;
     pollInterval?: number;
 
     onActivity?: (activity: ArchitectActivity) => void;
@@ -56,7 +55,7 @@ export interface ArchitectResultPayload {
 }
 
 export class Architect extends Agent {
-    private readonly provider: ClaudeCodeProvider;
+    private readonly provider: LLMProvider;
     private readonly onActivity?: (activity: ArchitectActivity) => void;
     private readonly skills: string[];
 
@@ -376,7 +375,7 @@ export class Architect extends Agent {
         });
     }
 
-    private createCanUseTool(jobId: string, architectMode: ArchitectMode): CanUseTool {
+    private createCanUseTool(jobId: string, architectMode: ArchitectMode): CanUseToolFn {
         return async (toolName, input, options) => {
             if (toolName !== 'AskUserQuestion') {
                 return { behavior: 'allow' as const };

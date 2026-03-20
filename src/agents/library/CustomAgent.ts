@@ -2,8 +2,7 @@
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider } from '../../types/llm.js';
-import { ClaudeCodeProvider, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity } from '../../types/llm.js';
 import type { CustomAgentConfig, ToolAccessLevel, AgentToolName } from '../../config/schema.js';
 import { detectSessionLimit } from '../../constants.js';
 import { readFile } from 'fs/promises';
@@ -50,7 +49,7 @@ export interface CustomAgentConstructorConfig {
 
     joblog: Joblog;
 
-    provider: ClaudeCodeProvider;
+    provider: LLMProvider;
 
     pollInterval?: number;
 
@@ -67,7 +66,7 @@ export interface CustomAgentConstructorConfig {
 }
 
 export class CustomAgent extends Agent {
-    private readonly provider: ClaudeCodeProvider;
+    private readonly provider: LLMProvider;
     private readonly agentConfig: CustomAgentConfig;
     private readonly onActivity?: (activity: CustomAgentActivity) => void;
     private readonly agentTeams: boolean;

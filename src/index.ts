@@ -14,18 +14,29 @@ export * from './types/agents.js';
 export { Joblog, JoblogError } from './joblog/Joblog.js';
 export { JsonlStorage, generateId } from './joblog/Storage.js';
 
+export type {
+    LLMProvider,
+    ExecuteOptions,
+    ExecuteResult,
+    StreamActivity,
+    FileChange,
+    CanUseToolFn,
+    ToolDecision,
+    CompletionOptions,
+    CompletionResult,
+    ModelInfo,
+} from './types/llm.js';
+export { LLMError } from './types/llm.js';
+
 export {
     ClaudeCodeProvider,
     type ClaudeCodeConfig,
     type QueryResult,
-    type ExecuteResult,
-    type ExecuteOptions,
     type LimitCheckResult,
-    type StreamActivity,
     type CanUseTool,
 } from './llm/claude-code.js';
 
-export type { LLMProvider } from './types/llm.js';
+export { createProvider, registerProvider, listProviders, type ProviderFactoryOptions, type ProviderName } from './llm/factory.js';
 
 export { Agent } from './agents/Agent.js';
 

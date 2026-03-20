@@ -159,7 +159,7 @@ export async function removeWorktree(
     try {
       await rm(worktreePath, { recursive: true, force: true });
 
-      await execFile('git', ['worktree', '.hugr'], { cwd: mainWorkdir });
+      await execFile('git', ['worktree', 'prune'], { cwd: mainWorkdir });
     } catch (cleanupError) {
       console.warn(`Worktree cleanup failed for ${worktreePath}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
     }

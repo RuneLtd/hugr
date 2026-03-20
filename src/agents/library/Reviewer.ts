@@ -4,13 +4,13 @@ import { join } from 'node:path';
 
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import { ClaudeCodeProvider, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity } from '../../types/llm.js';
 import { detectSessionLimit } from '../../constants.js';
 import { loadAgentSkills } from '../../utils/skills.js';
 
 export interface ReviewerConfig {
 	joblog: Joblog;
-	provider: ClaudeCodeProvider;
+	provider: LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: ReviewerActivity) => void;
@@ -51,7 +51,7 @@ const REVIEWER_TIMEOUT = 0;
 
 export class Reviewer {
 	private readonly joblog: Joblog;
-	private readonly provider: ClaudeCodeProvider;
+	private readonly provider: LLMProvider;
 	private readonly pollInterval: number;
 	private readonly projectPath?: string;
 	private readonly onActivity?: (activity: ReviewerActivity) => void;

@@ -5,13 +5,13 @@ import { loadDefaultSkill } from '../../utils/skills.js';
 
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import { ClaudeCodeProvider, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity } from '../../types/llm.js';
 import { detectSessionLimit, AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 
 export interface RavenConfig {
 	joblog: Joblog;
-	provider: ClaudeCodeProvider;
+	provider: LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: RavenActivity) => void;
@@ -56,7 +56,7 @@ export interface RavenResultPayload {
 
 export class Raven {
 	private readonly joblog: Joblog;
-	private readonly provider: ClaudeCodeProvider;
+	private readonly provider: LLMProvider;
 	private readonly pollInterval: number;
 	private readonly projectPath?: string;
 	private readonly onActivity?: (activity: RavenActivity) => void;

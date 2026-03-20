@@ -1,5 +1,5 @@
 {
-  "name": "hugr",
+  "name": "@runeltd/hugr",
   "version": "0.1.0",
   "description": "Multi-agent orchestration framework for Claude Code. Define pipelines, compose agents, and run iterative coding sessions.",
   "type": "module",

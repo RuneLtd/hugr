@@ -6,8 +6,7 @@ import { loadDefaultSkill } from '../../utils/skills.js';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider } from '../../types/llm.js';
-import { ClaudeCodeProvider, type CanUseTool, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
 import { detectSessionLimit } from '../../constants.js';
 
 export interface SkillCreatorActivity {
@@ -21,7 +20,7 @@ export interface SkillCreatorActivity {
 
 export interface SkillCreatorConfig {
     joblog: Joblog;
-    provider: ClaudeCodeProvider;
+    provider: LLMProvider;
     pollInterval?: number;
     onActivity?: (activity: SkillCreatorActivity) => void;
 }
@@ -44,7 +43,7 @@ export interface SkillCreatorAnswersPayload {
 }
 
 export class SkillCreator extends Agent {
-    private readonly provider: ClaudeCodeProvider;
+    private readonly provider: LLMProvider;
     private readonly onActivity?: (activity: SkillCreatorActivity) => void;
     private lastTextContent: string = '';
 
@@ -295,7 +294,7 @@ export class SkillCreator extends Agent {
         });
     }
 
-    private createCanUseTool(jobId: string): CanUseTool {
+    private createCanUseTool(jobId: string): CanUseToolFn {
         return async (toolName, input, options) => {
             if (toolName !== 'AskUserQuestion') {
                 return { behavior: 'allow' as const };

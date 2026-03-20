@@ -2,8 +2,7 @@
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage, JobOutput } from '../../types/joblog.js';
-import type { LLMProvider } from '../../types/llm.js';
-import { ClaudeCodeProvider, type StreamActivity } from '../../llm/claude-code.js';
+import type { LLMProvider, StreamActivity } from '../../types/llm.js';
 import { detectSessionLimit, AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { InterruptRequest } from '../../interrupt/types.js';
@@ -36,7 +35,7 @@ export type CoderActivity = {
 
 export interface CoderConfig {
   joblog: Joblog;
-  provider: ClaudeCodeProvider;
+  provider: LLMProvider;
   pollInterval?: number;
 
   projectPath?: string;
@@ -55,7 +54,7 @@ export interface CoderConfig {
 }
 
 export class Coder extends Agent {
-  private readonly provider: ClaudeCodeProvider;
+  private readonly provider: LLMProvider;
   private readonly autoAccept: boolean;
   private readonly onActivity?: (activity: CoderActivity) => void;
   private readonly selfReview: boolean;

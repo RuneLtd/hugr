@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import type { Joblog } from '../joblog/Joblog.js';
 import type { AgentMessage, JobOutput } from '../types/joblog.js';
 import type { LLMProvider } from '../types/llm.js';
-import { ClaudeCodeProvider } from '../llm/claude-code.js';
 import type { ArchitectMode, RavenPresetConfig, AutonomyLevel, PipelineConfig, PipelineStep, RavenMode, CustomAgentConfig } from '../config/schema.js';
 import { detectSessionLimit, AGENT_OUTPUT_FILES, getDefaultHandoffMessage } from '../constants.js';
 import {
@@ -51,7 +50,7 @@ export interface ManagerEvents {
 
 export interface ManagerConfig {
     joblog: Joblog;
-    provider: ClaudeCodeProvider;
+    provider: LLMProvider;
     pollInterval?: number;
 
     pipelineConfig: PipelineConfig;
@@ -147,7 +146,7 @@ export interface SessionState {
 
 export class Manager {
     private session: SessionState | null = null;
-    private provider: ClaudeCodeProvider;
+    private provider: LLMProvider;
     private joblog: Joblog;
     private rootJobId: string | null = null;
     private pendingClarificationFrom: string | null = null;
