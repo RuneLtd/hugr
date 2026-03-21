@@ -8,7 +8,7 @@ export interface AutonomyConfig {
   level: AutonomyLevel;
 }
 
-export type ProviderType = 'claude-code' | 'anthropic' | 'openai';
+export type ProviderType = 'claude-code' | (string & {});
 
 export interface ProviderConfig {
   type: ProviderType;
@@ -48,12 +48,12 @@ export interface RavenPresetConfig {
   maxIterations: number;
 }
 
-export type BuiltInAgentId = 'architect' | 'coder' | 'raven' | 'sentinel';
+export type BuiltInAgentId = 'architect' | 'coder' | 'raven' | 'reviewer';
 export type AgentId = BuiltInAgentId | (string & {});
 
 export type ToolAccessLevel = 'full' | 'read-only' | 'read-write-no-bash';
 
-export type AgentToolName = 'Read' | 'Write' | 'Edit' | 'Bash' | 'Glob' | 'Grep' | 'WebSearch' | 'WebFetch';
+export type AgentToolName = 'Read' | 'Write' | 'Edit' | 'Bash' | 'Glob' | 'Grep' | 'WebSearch' | 'WebFetch' | (string & {});
 
 export type AgentModelChoice = 'sonnet' | 'opus';
 
@@ -138,3 +138,20 @@ export type PartialHugrConfig = {
   raven?: Partial<RavenPresetConfig>;
   pipeline?: PipelineConfig;
 };
+
+export type IsolationMode = 'full' | 'lightweight' | 'none' | (string & {});
+
+export interface SessionImage {
+    id: string;
+    name: string;
+    mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+    base64: string;
+}
+
+export interface SessionFile {
+    id: string;
+    name: string;
+    size: number;
+    mimeType: string;
+    base64: string;
+}

@@ -1,7 +1,7 @@
 
-import type { Joblog } from '../joblog/Joblog';
-import type { LLMProvider } from '../types/llm';
-import type { AgentMessage } from '../types/joblog';
+import type { Joblog } from '../joblog/Joblog.js';
+import type { LLMProvider } from '../types/llm.js';
+import type { AgentMessage } from '../types/joblog.js';
 import type { InterruptRequest } from '../interrupt/types.js';
 import { readInterrupt, clearInterrupt } from '../interrupt/handler.js';
 
@@ -13,7 +13,7 @@ export interface AgentConfig {
 
   joblog: Joblog;
 
-  llm: LLMProvider;
+  runtime: LLMProvider;
 
   pollInterval?: number;
 
@@ -26,7 +26,7 @@ export abstract class Agent {
   readonly id: string;
   readonly name: string;
   protected readonly joblog: Joblog;
-  protected readonly llm: LLMProvider;
+  protected readonly runtime: LLMProvider;
   protected readonly pollInterval: number;
   protected readonly projectPath?: string;
 
@@ -38,7 +38,7 @@ export abstract class Agent {
     this.id = config.id;
     this.name = config.name;
     this.joblog = config.joblog;
-    this.llm = config.llm;
+    this.runtime = config.runtime;
     this.pollInterval = config.pollInterval ?? 1000;
     this.projectPath = config.projectPath;
   }

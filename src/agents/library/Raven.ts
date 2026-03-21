@@ -6,12 +6,12 @@ import { loadDefaultSkill } from '../../utils/skills.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import { detectSessionLimit, AGENT_OUTPUT_FILES } from '../../constants.js';
+import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 
 export interface RavenConfig {
 	joblog: Joblog;
-	provider: LLMProvider;
+	runtime: LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: RavenActivity) => void;
@@ -56,7 +56,7 @@ export interface RavenResultPayload {
 
 export class Raven {
 	private readonly joblog: Joblog;
-	private readonly provider: LLMProvider;
+	private readonly runtime: LLMProvider;
 	private readonly pollInterval: number;
 	private readonly projectPath?: string;
 	private readonly onActivity?: (activity: RavenActivity) => void;
@@ -68,7 +68,7 @@ export class Raven {
 
 	constructor(config: RavenConfig) {
 		this.joblog = config.joblog;
-		this.provider = config.provider;
+		this.runtime = config.runtime;
 		this.pollInterval = config.pollInterval ?? 500;
 		this.projectPath = config.projectPath;
 		this.onActivity = config.onActivity;
@@ -198,7 +198,7 @@ export class Raven {
 		console.log(`   Skill loaded: ${!!ravenSkill} (${(ravenSkill || '').length} chars)`);
 		console.log(`\n   Launching Claude Code session for code review...`);
 
-		const result = await this.provider.execute({
+		const result = await (this.runtime as any).execute({
 			workdir: payload.projectPath,
 			sessionProjectPath: sessionPath,
 			task: prompt,
@@ -221,8 +221,8 @@ export class Raven {
 		console.log(`   Success: ${result.success}`);
 
 		if (!result.success) {
-			const limitCheck = detectSessionLimit(result.transcript ?? '');
-			if (limitCheck.isLimited) {
+				if (result.sessionLimited) {
+			
 				console.log(`   ⚠️  SESSION LIMIT DETECTED IN RAVEN`);
 				await this.send({
 					type: 'task_result',
@@ -231,7 +231,7 @@ export class Raven {
 					payload: {
 						success: false,
 						sessionLimited: true,
-						resetTime: limitCheck.resetTime,
+						resetTime: result.resetTime,
 						error: `Session limit reached during Raven review (iteration ${payload.iteration})`,
 					},
 				});
@@ -506,7 +506,7 @@ Required JSON shape:
 		});
 	}
 
-	private async sendResult(jobId: string, result: RavenResultPayload, ccSessionId?: string): Promise<void> {
+	private async sendResult(jobId: string, result: RavenResultPayload, providerSessionId?: string): Promise<void> {
 		await this.send({
 			type: 'task_result',
 			to: 'manager',
@@ -520,7 +520,7 @@ Required JSON shape:
 					files: [],
 					summary: result.summary,
 				},
-				ccSessionId,
+				providerSessionId,
 			},
 		});
 	}

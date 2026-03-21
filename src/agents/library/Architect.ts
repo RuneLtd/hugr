@@ -6,7 +6,6 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
-import { detectSessionLimit } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { ArchitectMode } from '../../config/schema.js';
 import { loadAgentSkills } from '../../utils/skills.js';
@@ -23,7 +22,7 @@ export interface ArchitectActivity {
 
 export interface ArchitectConfig {
     joblog: Joblog;
-    provider: LLMProvider;
+    runtime: LLMProvider;
     pollInterval?: number;
 
     onActivity?: (activity: ArchitectActivity) => void;
@@ -49,13 +48,12 @@ export interface ArchitectAnswersPayload {
 }
 
 export interface ArchitectResultPayload {
-    enhancedPrompt: string;
+    currentPrompt: string;
     assumptions: string[];
     mode: ArchitectMode;
 }
 
 export class Architect extends Agent {
-    private readonly provider: LLMProvider;
     private readonly onActivity?: (activity: ArchitectActivity) => void;
     private readonly skills: string[];
 
@@ -64,99 +62,11 @@ export class Architect extends Agent {
             id: 'architect',
             name: 'Architect',
             joblog: config.joblog,
-            llm: config.provider as unknown as LLMProvider,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
         });
-        this.provider = config.provider;
         this.onActivity = config.onActivity;
         this.skills = config.skills ?? [];
-    }
-
-    private handleStreamActivity(jobId: string, activity: StreamActivity): void {
-        if (!this.onActivity) return;
-
-        switch (activity.type) {
-            case 'tool_start': {
-                const toolName = activity.toolName?.toLowerCase() ?? '';
-
-                if (toolName.includes('askuserquestion')) break;
-
-                if (!activity.displayInput) break;
-                let activityType: ArchitectActivity['type'] = 'enhancing';
-                if (toolName.includes('read') || toolName.includes('glob') || toolName.includes('grep')) {
-                    activityType = 'reading';
-                }
-                const details = JSON.stringify({
-                    toolName: activity.toolName,
-                    displayInput: activity.displayInput,
-                });
-                this.onActivity({
-                    type: activityType,
-                    message: `${activity.toolName} ${activity.displayInput}`,
-                    file: activity.toolName,
-                    agentId: this.id,
-                    jobId,
-                    details,
-                });
-                break;
-            }
-            case 'tool_progress': {
-                const details = JSON.stringify({
-                    toolName: activity.toolName,
-                    elapsedSeconds: activity.elapsedSeconds,
-                });
-                this.onActivity({
-                    type: 'reading',
-                    message: activity.content || `${activity.toolName} (${activity.elapsedSeconds}s)`,
-                    agentId: this.id,
-                    jobId,
-                    details,
-                });
-                break;
-            }
-            case 'tool_summary': {
-                const details = JSON.stringify({
-                    toolName: activity.toolName,
-                    stat: activity.stat,
-                });
-                this.onActivity({
-                    type: 'reading',
-                    message: activity.stat || activity.content,
-                    agentId: this.id,
-                    jobId,
-                    details,
-                });
-                break;
-            }
-            case 'text':
-
-                if (activity.content.length > 10) {
-                    this.onActivity({
-                        type: 'thinking',
-                        message: activity.content,
-                        agentId: this.id,
-                        jobId,
-                    });
-                }
-                break;
-            case 'thinking':
-
-                this.onActivity({
-                    type: 'thinking',
-                    message: activity.content,
-                    agentId: this.id,
-                    jobId,
-                });
-                break;
-            case 'error':
-                this.onActivity({
-                    type: 'enhancing',
-                    message: `Error: ${activity.content}`,
-                    agentId: this.id,
-                    jobId,
-                });
-                break;
-        }
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
@@ -250,7 +160,7 @@ export class Architect extends Agent {
                     summary: 'Recovered enhanced prompt from existing file',
                 },
                 result: {
-                    enhancedPrompt: existingEnhancedPrompt.prompt,
+                    currentPrompt: existingEnhancedPrompt.prompt,
                     assumptions: existingEnhancedPrompt.assumptions,
                     mode: payload.architectMode,
                 } satisfies ArchitectResultPayload,
@@ -282,7 +192,7 @@ export class Architect extends Agent {
         console.log(`   ${prompt.slice(0, 300)}${prompt.length > 300 ? '...' : ''}`);
         console.log(`   Skill loaded: ${!!architectSkill} (${(architectSkill || '').length} chars)`);
 
-        const result = await this.provider.execute({
+        const result = await (this.runtime as any).execute({
             workdir: payload.projectPath,
             task: prompt,
             autoAccept: true,
@@ -296,7 +206,7 @@ export class Architect extends Agent {
             filePaths: payload.filePaths,
             onActivity: this.onActivity
                 ? (streamActivity: StreamActivity) => {
-                      this.handleStreamActivity(jobId, streamActivity);
+                      this.handleStreamActivityFn(jobId, streamActivity);
                   }
                 : undefined,
         });
@@ -307,14 +217,13 @@ export class Architect extends Agent {
         console.log(`   Success: ${result.success}`);
 
         if (!result.success) {
-            const limitCheck = detectSessionLimit(result.transcript ?? '');
-            if (limitCheck.isLimited) {
+										if (result.sessionLimited) {
                 console.log(`   ⚠️  SESSION LIMIT DETECTED IN ARCHITECT`);
                 await this.sendResult(jobId, {
                     success: false,
-                    error: `Session limit reached${limitCheck.resetTime ? ` - resets ${limitCheck.resetTime}` : ''}`,
+                    error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
                     sessionLimited: true,
-                    resetTime: limitCheck.resetTime,
+                    resetTime: result.resetTime,
                 });
                 return;
             }
@@ -367,12 +276,99 @@ export class Architect extends Agent {
                 summary: `Enhanced prompt with ${finalOutput.assumptions.length} assumptions`,
             },
             result: {
-                enhancedPrompt: finalOutput.enhancedPrompt,
+                currentPrompt: finalOutput.enhancedPrompt,
                 assumptions: finalOutput.assumptions,
                 mode: payload.architectMode,
             } satisfies ArchitectResultPayload,
-            ccSessionId: result.sessionId,
+            providerSessionId: result.sessionId,
         });
+    }
+
+    private handleStreamActivityFn(jobId: string, activity: StreamActivity): void {
+        if (!this.onActivity) return;
+
+        switch (activity.type) {
+            case 'tool_start': {
+                const toolName = activity.toolName?.toLowerCase() ?? '';
+
+                if (toolName.includes('askuserquestion')) break;
+
+                if (!activity.displayInput) break;
+                let activityType: ArchitectActivity['type'] = 'enhancing';
+                if (toolName.includes('read') || toolName.includes('glob') || toolName.includes('grep')) {
+                    activityType = 'reading';
+                }
+                const details = JSON.stringify({
+                    toolName: activity.toolName,
+                    displayInput: activity.displayInput,
+                });
+                this.onActivity({
+                    type: activityType,
+                    message: `${activity.toolName} ${activity.displayInput}`,
+                    file: activity.toolName,
+                    agentId: this.id,
+                    jobId,
+                    details,
+                });
+                break;
+            }
+            case 'tool_progress': {
+                const details = JSON.stringify({
+                    toolName: activity.toolName,
+                    elapsedSeconds: activity.elapsedSeconds,
+                });
+                this.onActivity({
+                    type: 'reading',
+                    message: activity.content || `${activity.toolName} (${activity.elapsedSeconds}s)`,
+                    agentId: this.id,
+                    jobId,
+                    details,
+                });
+                break;
+            }
+            case 'tool_summary': {
+                const details = JSON.stringify({
+                    toolName: activity.toolName,
+                    stat: activity.stat,
+                });
+                this.onActivity({
+                    type: 'reading',
+                    message: activity.stat || activity.content,
+                    agentId: this.id,
+                    jobId,
+                    details,
+                });
+                break;
+            }
+            case 'text':
+
+                if (activity.content.length > 10) {
+                    this.onActivity({
+                        type: 'thinking',
+                        message: activity.content,
+                        agentId: this.id,
+                        jobId,
+                    });
+                }
+                break;
+            case 'thinking':
+
+                this.onActivity({
+                    type: 'thinking',
+                    message: activity.content,
+                    agentId: this.id,
+                    jobId,
+                });
+                break;
+            case 'error':
+                this.onActivity({
+                    type: 'enhancing',
+                    message: `Error: ${activity.content}`,
+                    agentId: this.id,
+                    jobId,
+                });
+                break;
+        }
     }
 
     private createCanUseTool(jobId: string, architectMode: ArchitectMode): CanUseToolFn {

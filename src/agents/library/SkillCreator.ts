@@ -7,7 +7,6 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
-import { detectSessionLimit } from '../../constants.js';
 
 export interface SkillCreatorActivity {
     type: 'thinking' | 'reading' | 'writing' | 'complete' | 'text';
@@ -20,7 +19,7 @@ export interface SkillCreatorActivity {
 
 export interface SkillCreatorConfig {
     joblog: Joblog;
-    provider: LLMProvider;
+    runtime: LLMProvider;
     pollInterval?: number;
     onActivity?: (activity: SkillCreatorActivity) => void;
 }
@@ -43,7 +42,6 @@ export interface SkillCreatorAnswersPayload {
 }
 
 export class SkillCreator extends Agent {
-    private readonly provider: LLMProvider;
     private readonly onActivity?: (activity: SkillCreatorActivity) => void;
     private lastTextContent: string = '';
 
@@ -52,10 +50,9 @@ export class SkillCreator extends Agent {
             id: 'hugr-skill-creator',
             name: 'Skill Creator',
             joblog: config.joblog,
-            llm: config.provider as unknown as LLMProvider,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
         });
-        this.provider = config.provider;
         this.onActivity = config.onActivity;
     }
 
@@ -171,7 +168,7 @@ export class SkillCreator extends Agent {
             projectPath: string;
             images?: Array<{ id: string; name: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; base64: string }>;
             filePaths?: string[];
-            resumeCCSession?: string;
+            resumeProviderSession?: string;
         };
 
         if (!message.jobId) {
@@ -214,7 +211,7 @@ export class SkillCreator extends Agent {
 
     private async runSkillCreatorSession(
         jobId: string,
-        payload: { task: string; projectPath: string; images?: Array<{ id: string; name: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; base64: string }>; filePaths?: string[]; resumeCCSession?: string },
+        payload: { task: string; projectPath: string; images?: Array<{ id: string; name: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; base64: string }>; filePaths?: string[]; resumeProviderSession?: string },
     ): Promise<void> {
         const useOpenClaw = this.isOpenClawTask(payload.task);
         const skillCreatorSkill = await loadDefaultSkill(
@@ -238,11 +235,11 @@ export class SkillCreator extends Agent {
         console.log(`   ${prompt.slice(0, 300)}${prompt.length > 300 ? '...' : ''}`);
         console.log(`   Skill loaded: ${!!skillCreatorSkill} (${(skillCreatorSkill || '').length} chars)`);
 
-        if (payload.resumeCCSession) {
-            console.log(`   🔄 Resuming CC session: ${payload.resumeCCSession}`);
+        if (payload.resumeProviderSession) {
+            console.log(`   🔄 Resuming provider session: ${payload.resumeProviderSession}`);
         }
 
-        const result = await this.provider.execute({
+        const result = await (this.runtime as any).execute({
             workdir: payload.projectPath,
             task: prompt,
             autoAccept: true,
@@ -253,7 +250,7 @@ export class SkillCreator extends Agent {
             allowedTools: ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'AskUserQuestion', 'Bash'],
             images: payload.images,
             filePaths: payload.filePaths,
-            resume: payload.resumeCCSession,
+            resume: payload.resumeProviderSession,
             onActivity: this.onActivity
                 ? (streamActivity: StreamActivity) => {
                       this.handleStreamActivity(jobId, streamActivity);
@@ -267,14 +264,13 @@ export class SkillCreator extends Agent {
         console.log(`   Success: ${result.success}`);
 
         if (!result.success) {
-            const limitCheck = detectSessionLimit(result.transcript ?? '');
-            if (limitCheck.isLimited) {
+										if (result.sessionLimited) {
                 console.log(`   ⚠️  SESSION LIMIT DETECTED IN SKILL CREATOR`);
                 await this.sendResult(jobId, {
                     success: false,
-                    error: `Session limit reached${limitCheck.resetTime ? ` - resets ${limitCheck.resetTime}` : ''}`,
+                    error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
                     sessionLimited: true,
-                    resetTime: limitCheck.resetTime,
+                    resetTime: result.resetTime,
                 });
                 return;
             }
@@ -290,7 +286,7 @@ export class SkillCreator extends Agent {
                 files: [],
                 summary: this.lastTextContent || 'Skill creation session complete',
             },
-            ccSessionId: result.sessionId,
+            providerSessionId: result.sessionId,
         });
     }
 

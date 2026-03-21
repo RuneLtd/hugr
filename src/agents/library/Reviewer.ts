@@ -5,12 +5,11 @@ import { join } from 'node:path';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import { detectSessionLimit } from '../../constants.js';
 import { loadAgentSkills } from '../../utils/skills.js';
 
 export interface ReviewerConfig {
 	joblog: Joblog;
-	provider: LLMProvider;
+	runtime: LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: ReviewerActivity) => void;
@@ -51,7 +50,7 @@ const REVIEWER_TIMEOUT = 0;
 
 export class Reviewer {
 	private readonly joblog: Joblog;
-	private readonly provider: LLMProvider;
+	private readonly runtime: LLMProvider;
 	private readonly pollInterval: number;
 	private readonly projectPath?: string;
 	private readonly onActivity?: (activity: ReviewerActivity) => void;
@@ -64,7 +63,7 @@ export class Reviewer {
 
 	constructor(config: ReviewerConfig) {
 		this.joblog = config.joblog;
-		this.provider = config.provider;
+		this.runtime = config.runtime;
 		this.pollInterval = config.pollInterval ?? 500;
 		this.projectPath = config.projectPath;
 		this.onActivity = config.onActivity;
@@ -189,7 +188,7 @@ export class Reviewer {
 
 		console.log(`\n   Launching Claude Code session for code review...`);
 
-		const result = await this.provider.execute({
+		const result = await (this.runtime as any).execute({
 			workdir: payload.projectPath,
 			sessionProjectPath: sessionPath,
 			task: prompt,
@@ -212,9 +211,7 @@ export class Reviewer {
 		console.log(`   Success: ${result.success}`);
 
 		if (!result.success) {
-			const limitCheck = detectSessionLimit(result.transcript ?? '');
-			if (limitCheck.isLimited) {
-				console.log(`   ⚠️  SESSION LIMIT DETECTED IN REVIEWER`);
+				if (result.sessionLimited) {
 				await this.send({
 					type: 'task_result',
 					to: 'manager',
@@ -222,7 +219,7 @@ export class Reviewer {
 					payload: {
 						success: false,
 						sessionLimited: true,
-						resetTime: limitCheck.resetTime,
+						resetTime: result.resetTime,
 						error: 'Session limit reached during code review',
 					},
 				});
@@ -385,7 +382,7 @@ Read through the project codebase and report your findings. Analyze the code and
 		});
 	}
 
-	private async sendResult(jobId: string, result: ReviewerResultPayload, ccSessionId?: string): Promise<void> {
+	private async sendResult(jobId: string, result: ReviewerResultPayload, providerSessionId?: string): Promise<void> {
 		await this.send({
 			type: 'task_result',
 			to: 'manager',
@@ -397,7 +394,7 @@ Read through the project codebase and report your findings. Analyze the code and
 					files: [],
 					summary: result.summary,
 				},
-				ccSessionId,
+				providerSessionId,
 			},
 		});
 	}

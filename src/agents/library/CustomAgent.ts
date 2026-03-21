@@ -4,7 +4,6 @@ import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
 import type { CustomAgentConfig, ToolAccessLevel, AgentToolName } from '../../config/schema.js';
-import { detectSessionLimit } from '../../constants.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { loadSkills as loadSkillsUtil } from '../../utils/skills.js';
@@ -49,7 +48,7 @@ export interface CustomAgentConstructorConfig {
 
     joblog: Joblog;
 
-    provider: LLMProvider;
+    runtime: LLMProvider;
 
     pollInterval?: number;
 
@@ -66,7 +65,6 @@ export interface CustomAgentConstructorConfig {
 }
 
 export class CustomAgent extends Agent {
-    private readonly provider: LLMProvider;
     private readonly agentConfig: CustomAgentConfig;
     private readonly onActivity?: (activity: CustomAgentActivity) => void;
     private readonly agentTeams: boolean;
@@ -78,12 +76,11 @@ export class CustomAgent extends Agent {
             id: config.id,
             name: config.agentConfig.name,
             joblog: config.joblog,
-            llm: config.provider as unknown as LLMProvider,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
             projectPath: config.projectPath,
         });
 
-        this.provider = config.provider;
         this.agentConfig = config.agentConfig;
         this.onActivity = config.onActivity;
         this.agentTeams = config.agentTeams ?? false;
@@ -192,7 +189,7 @@ export class CustomAgent extends Agent {
                 jobId,
             });
 
-            const result = await this.provider.execute({
+            const result = await (this.runtime as any).execute({
                 workdir: payload.projectPath,
                 sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
                 task: taskPrompt,
@@ -215,7 +212,7 @@ export class CustomAgent extends Agent {
             console.log(`   Success: ${result.success}`);
             console.log(`   Files changed: ${result.filesChanged.length}`);
             if (result.filesChanged.length > 0) {
-                result.filesChanged.slice(0, 5).forEach(f => console.log(`     - ${f}`));
+                result.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
                 if (result.filesChanged.length > 5) {
                     console.log(`     ... and ${result.filesChanged.length - 5} more`);
                 }
@@ -236,7 +233,7 @@ export class CustomAgent extends Agent {
                         jobId,
                     });
 
-                    const reviewResult = await this.provider.execute({
+                    const reviewResult = await (this.runtime as any).execute({
                         workdir: payload.projectPath,
                         sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
                         task: `Review the changes you just made. Look for:
@@ -265,13 +262,12 @@ If everything looks good, you're done.`,
                     }
 
                     if (!reviewResult.success) {
-                        const reviewLimitCheck = detectSessionLimit(reviewResult.transcript ?? '');
-                        if (reviewLimitCheck.isLimited) {
+                        if (reviewResult.sessionLimited) {
                             await this.sendResult(jobId, {
                                 success: false,
-                                error: `Session limit reached during self-review${reviewLimitCheck.resetTime ? ` - resets ${reviewLimitCheck.resetTime}` : ''}`,
+                                error: `Session limit reached during self-review${reviewResult.resetTime ? ` - resets ${reviewResult.resetTime}` : ''}`,
                                 sessionLimited: true,
-                                resetTime: reviewLimitCheck.resetTime,
+                                resetTime: reviewResult.resetTime,
                             });
                             return;
                         }
@@ -282,10 +278,10 @@ If everything looks good, you're done.`,
                 console.log(`✅ ${config.name.toUpperCase()} SUCCESS`);
                 console.log(`   Files changed: ${result.filesChanged.length}`);
                 if (result.filesChanged.length > 0) {
-                    result.filesChanged.slice(0, 10).forEach(f => console.log(`     - ${f}`));
+                    result.filesChanged.slice(0, 10).forEach((f: string) => console.log(`     - ${f}`));
                     if (result.filesChanged.length > 10) console.log(`     ... and ${result.filesChanged.length - 10} more`);
                 }
-                console.log(`   ccSessionId: ${result.sessionId || 'none'}`);
+                console.log(`   providerSessionId: ${result.sessionId || 'none'}`);
                 console.log(`${'═'.repeat(60)}`);
 
                 let stepOutput: StepOutputPayload | undefined;
@@ -335,14 +331,14 @@ If everything looks good, you're done.`,
                 const resultPayload = {
                     success: true,
                     output: {
-                        files: result.fileChanges.map(change => ({
+                        files: result.fileChanges.map((change: { path: string; action: string }) => ({
                             path: change.path,
                             action: change.action === 'created' ? 'create' : change.action === 'deleted' ? 'delete' : 'modify',
                             summary: `${change.action} by ${config.name}`,
                         })),
                         summary: stepOutput?.summary || `${config.name} completed: ${payload.task.slice(0, 100)}`,
                     },
-                    ccSessionId: result.sessionId,
+                    providerSessionId: result.sessionId,
                     // Pipeline-specific fields
                     ...(stepOutput ? {
                         done: stepOutput.done,
@@ -360,14 +356,13 @@ If everything looks good, you're done.`,
                 await this.sendResult(jobId, resultPayload);
             } else {
 
-                const limitCheck = detectSessionLimit(result.transcript ?? '');
-                if (limitCheck.isLimited) {
+                if (result.sessionLimited) {
                     console.log(`   ⚠️  SESSION LIMIT DETECTED`);
                     await this.sendResult(jobId, {
                         success: false,
-                        error: `Session limit reached${limitCheck.resetTime ? ` - resets ${limitCheck.resetTime}` : ''}`,
+                        error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
                         sessionLimited: true,
-                        resetTime: limitCheck.resetTime,
+                        resetTime: result.resetTime,
                     });
                     return;
                 }
@@ -386,14 +381,14 @@ If everything looks good, you're done.`,
                             await this.sendResult(jobId, {
                                 success: true,
                                 output: {
-                                    files: result.fileChanges.map(change => ({
+                                    files: result.fileChanges.map((change: { path: string; action: string }) => ({
                                         path: change.path,
                                         action: change.action === 'created' ? 'create' : change.action === 'deleted' ? 'delete' : 'modify',
                                         summary: `${change.action} by ${config.name}`,
                                     })),
                                     summary: stepOutput.summary,
                                 },
-                                ccSessionId: result.sessionId,
+                                providerSessionId: result.sessionId,
                                 done: stepOutput.done,
                                 nextPrompt: stepOutput.nextPrompt,
                                 findings: stepOutput.findings,

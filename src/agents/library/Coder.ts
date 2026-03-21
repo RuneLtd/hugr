@@ -3,7 +3,7 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage, JobOutput } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import { detectSessionLimit, AGENT_OUTPUT_FILES } from '../../constants.js';
+import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { InterruptRequest } from '../../interrupt/types.js';
 import { commitAll } from '../../git/index.js';
@@ -35,7 +35,7 @@ export type CoderActivity = {
 
 export interface CoderConfig {
   joblog: Joblog;
-  provider: LLMProvider;
+  runtime: LLMProvider;
   pollInterval?: number;
 
   projectPath?: string;
@@ -54,7 +54,6 @@ export interface CoderConfig {
 }
 
 export class Coder extends Agent {
-  private readonly provider: LLMProvider;
   private readonly autoAccept: boolean;
   private readonly onActivity?: (activity: CoderActivity) => void;
   private readonly selfReview: boolean;
@@ -67,12 +66,11 @@ export class Coder extends Agent {
       id: 'coder',
       name: 'Coder',
       joblog: config.joblog,
-      llm: config.provider as unknown as LLMProvider,
+      runtime: config.runtime,
       pollInterval: config.pollInterval,
       projectPath: config.projectPath,
     });
 
-    this.provider = config.provider;
     this.autoAccept = config.autoAccept ?? true;
     this.onActivity = config.onActivity;
     this.selfReview = config.selfReview ?? true;
@@ -397,7 +395,7 @@ export class Coder extends Agent {
       iteration?: number;
       originalPrompt?: string;
 
-      resumeCCSession?: string;
+      resumeProviderSession?: string;
 
       images?: Array<{ id: string; name: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; base64: string }>;
       filePaths?: string[];
@@ -419,7 +417,7 @@ export class Coder extends Agent {
     console.log(`   Original prompt: ${payload.originalPrompt ? `${payload.originalPrompt.slice(0, 100)}...` : 'not provided'}`);
     console.log(`   Auto-accept: ${this.autoAccept}`);
     console.log(`   Self-review: ${this.selfReview}`);
-    console.log(`   Resume CC session: ${payload.resumeCCSession || 'none'}`);
+    console.log(`   Resume provider session: ${payload.resumeProviderSession || 'none'}`);
     console.log(`   Images: ${payload.images?.length || 0}`);
 
     await this.logActivity(jobId, 'llm_call', {
@@ -452,7 +450,7 @@ export class Coder extends Agent {
       const sessionPath = this.projectPath || payload.projectPath;
 
       const existingHook = await this.readHook(sessionPath);
-      const resumeSessionId = payload.resumeCCSession || existingHook?.sdkSessionId;
+      const resumeSessionId = payload.resumeProviderSession || existingHook?.sdkSessionId;
 
       await this.writeHook(sessionPath, {
         jobId,
@@ -473,7 +471,7 @@ export class Coder extends Agent {
         jobId,
       });
 
-      const result = await this.provider.execute({
+      const result = await (this.runtime as any).execute({
         workdir: payload.projectPath,
         sessionProjectPath: sessionPath,
         task: taskPrompt,
@@ -485,7 +483,7 @@ export class Coder extends Agent {
         resume: resumeSessionId,
         images: payload.images,
         filePaths: payload.filePaths,
-        onSessionInit: (sdkSessionId) => {
+        onSessionInit: (sdkSessionId: string) => {
 
           this.writeHook(sessionPath, {
             jobId,
@@ -506,7 +504,7 @@ export class Coder extends Agent {
       console.log(`   Success: ${result.success}`);
       console.log(`   Files changed: ${result.filesChanged.length}`);
       if (result.filesChanged.length > 0) {
-        result.filesChanged.slice(0, 5).forEach(f => console.log(`     - ${f}`));
+        result.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
         if (result.filesChanged.length > 5) {
           console.log(`     ... and ${result.filesChanged.length - 5} more`);
         }
@@ -533,7 +531,7 @@ export class Coder extends Agent {
             jobId,
           });
 
-          const reviewResult = await this.provider.execute({
+          const reviewResult = await (this.runtime as any).execute({
             workdir: payload.projectPath,
             sessionProjectPath: sessionPath,
             task: `Review the code you just wrote. Look for:
@@ -563,20 +561,19 @@ If everything looks good and runs without errors, you're done.`,
           console.log(`   Success: ${reviewResult.success}`);
           if (reviewResult.filesChanged.length > 0) {
             console.log(`   Files fixed: ${reviewResult.filesChanged.length}`);
-            reviewResult.filesChanged.slice(0, 5).forEach(f => console.log(`     - ${f}`));
+            reviewResult.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
           }
           console.log(`${'─'.repeat(60)}`);
 
           if (!reviewResult.success) {
             console.warn(`   ⚠️ Self-review session failed, continuing with implementation result`);
 
-            const reviewLimitCheck = detectSessionLimit(reviewResult.transcript ?? '');
-            if (reviewLimitCheck.isLimited) {
+            if (reviewResult.sessionLimited) {
               await this.sendResult(jobId, {
                 success: false,
-                error: `Session limit reached during self-review${reviewLimitCheck.resetTime ? ` - resets ${reviewLimitCheck.resetTime}` : ''}`,
+                error: `Session limit reached during self-review${reviewResult.resetTime ? ` - resets ${reviewResult.resetTime}` : ''}`,
                 sessionLimited: true,
-                resetTime: reviewLimitCheck.resetTime,
+                resetTime: reviewResult.resetTime,
               });
               return;
             }
@@ -587,9 +584,9 @@ If everything looks good and runs without errors, you're done.`,
 
         await this.clearHook(sessionPath);
 
-        const ACTION_MAP = { created: 'create', modified: 'modify', deleted: 'delete' } as const;
+        const ACTION_MAP: Record<string, string> = { created: 'create', modified: 'modify', deleted: 'delete' };
         const jobOutput: JobOutput = {
-          files: result.fileChanges.map(change => ({
+          files: result.fileChanges.map((change: { path: string; action: string }) => ({
             path: change.path,
             action: ACTION_MAP[change.action] ?? 'modify',
             summary: `${change.action.charAt(0).toUpperCase() + change.action.slice(1)} during implementation`,
@@ -608,30 +605,29 @@ If everything looks good and runs without errors, you're done.`,
         jobOutput.files.slice(0, 10).forEach(f => console.log(`     ${f.action}: ${f.path}`));
         if (jobOutput.files.length > 10) console.log(`     ... and ${jobOutput.files.length - 10} more`);
         console.log(`   Summary: ${jobOutput.summary.slice(0, 150)}`);
-        console.log(`   ccSessionId: ${result.sessionId || 'none'}`);
+        console.log(`   providerSessionId: ${result.sessionId || 'none'}`);
         console.log(`${'═'.repeat(60)}\n`);
 
         await this.sendResult(jobId, {
           success: true,
           output: jobOutput,
-          ccSessionId: result.sessionId,
+          providerSessionId: result.sessionId,
         });
       } else {
 
-        const limitCheck = detectSessionLimit(result.transcript ?? '');
-        if (limitCheck.isLimited) {
+        if (result.sessionLimited) {
           console.log(`\n${'═'.repeat(60)}`);
           console.log(`⚠️  SESSION LIMIT DETECTED`);
-          if (limitCheck.resetTime) {
-            console.log(`   Resets: ${limitCheck.resetTime}`);
+          if (result.resetTime) {
+            console.log(`   Resets: ${result.resetTime}`);
           }
           console.log(`${'═'.repeat(60)}\n`);
 
           await this.sendResult(jobId, {
             success: false,
-            error: `Session limit reached${limitCheck.resetTime ? ` - resets ${limitCheck.resetTime}` : ''}`,
+            error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
             sessionLimited: true,
-            resetTime: limitCheck.resetTime,
+            resetTime: result.resetTime,
           });
           return;
         }

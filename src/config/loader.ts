@@ -176,11 +176,6 @@ export function validateConfig(config: HugrConfig): { valid: boolean; errors: st
     errors.push('autonomy.level is required');
   }
 
-  const validProviders = ['claude-code', 'anthropic', 'openai'];
-  if (config.provider?.type && !validProviders.includes(config.provider.type)) {
-    errors.push(`Invalid provider: ${config.provider.type}`);
-  }
-
   const validAutonomy = ['supervised', 'auto'];
   if (config.autonomy?.level && !validAutonomy.includes(config.autonomy.level)) {
     errors.push(`Invalid autonomy level: ${config.autonomy.level}`);

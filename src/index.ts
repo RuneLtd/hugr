@@ -1,14 +1,10 @@
-
 export * from './config/index.js';
-
 export * from './constants.js';
 
 export { loadSkillFromPath, loadSkills, loadDefaultSkill, loadAgentSkills } from './utils/skills.js';
-
 export { resolveHugrDir, resolveSessionDataDir, resolveWorktreeDir } from './paths.js';
 
 export * from './types/joblog.js';
-
 export * from './types/agents.js';
 
 export { Joblog, JoblogError } from './joblog/Joblog.js';
@@ -19,12 +15,12 @@ export type {
     ExecuteOptions,
     ExecuteResult,
     StreamActivity,
-    FileChange,
+    FileChange as LLMFileChange,
     CanUseToolFn,
     ToolDecision,
-    CompletionOptions,
-    CompletionResult,
-    ModelInfo,
+    CompletionOptions as LLMCompletionOptions,
+    CompletionResult as LLMCompletionResult,
+    ModelInfo as LLMModelInfo,
 } from './types/llm.js';
 export { LLMError } from './types/llm.js';
 
@@ -40,7 +36,7 @@ export { createProvider, registerProvider, listProviders, type ProviderFactoryOp
 
 export { Agent } from './agents/Agent.js';
 
-export { Manager, type ManagerConfig, type ManagerEvents, type SessionConfig, type SessionState, type VersionEntry } from './agents/Manager.js';
+export { Manager, type ManagerConfig, type ManagerEvents, type SessionConfig, type SessionState } from './agents/Manager.js';
 
 export {
     Architect,
@@ -82,7 +78,7 @@ export {
     type SkillCreatorActivity,
 } from './agents/library/SkillCreator.js';
 
-export type { CustomAgentConfig, ToolAccessLevel, AgentToolName, AgentModelChoice } from './config/schema.js';
+export type { CustomAgentConfig, ToolAccessLevel as ConfigToolAccessLevel, AgentToolName, AgentModelChoice } from './config/schema.js';
 
 export {
     type MergeResult,
@@ -107,3 +103,49 @@ export {
     clearInterrupt,
     hasInterrupt,
 } from './interrupt/index.js';
+
+export type {
+    AgentRuntime,
+    AgentRunOptions,
+    AgentRunResult,
+    AgentActivity,
+    FileChange,
+    ImageAttachment,
+    CompletionOptions,
+    CompletionResult,
+    ModelInfo,
+} from './runtime/types.js';
+export { RuntimeError } from './runtime/types.js';
+export type { RateLimitHandler, RateLimitInfo } from './runtime/rate-limit.js';
+export type { FileChangeDetector } from './runtime/file-changes.js';
+export { registerRuntime, createRuntime, listRuntimes, type RuntimeName, type RuntimeFactoryOptions } from './runtime/factory.js';
+export { ClaudeCodeRuntime, type ClaudeCodeRuntimeOptions } from './runtime/claude-code/index.js';
+
+export { AgentRegistry, type AgentHandler, type AgentDispatchContext } from './agents/registry.js';
+export { ActivityMapper, type MappedActivity, type ToolCategoryFn } from './agents/activity-mapper.js';
+
+export type { VCSProvider, IsolatedWorkspace, IsolationMode } from './vcs/types.js';
+export { GitVCSProvider } from './vcs/git.js';
+export { NoopVCSProvider } from './vcs/noop.js';
+
+export type { StorageProvider, PathResolver } from './storage/types.js';
+export { LocalStorageProvider, type LocalStorageConfig } from './storage/local.js';
+
+export type { SkillLoader } from './skills/types.js';
+export { FileSystemSkillLoader, type FileSystemSkillLoaderOptions } from './skills/filesystem.js';
+
+export type { ToolDefinition, ToolCapability, ToolAccessLevel, ToolResolver } from './tools/types.js';
+export { ToolRegistry } from './tools/registry.js';
+export { createClaudeCodeToolRegistry } from './tools/claude-code.js';
+export { createOpenAIToolRegistry } from './tools/openai.js';
+export { createGeminiToolRegistry } from './tools/gemini.js';
+export { createAnthropicToolRegistry } from './tools/anthropic.js';
+export { createMistralToolRegistry } from './tools/mistral.js';
+export { createXAIToolRegistry } from './tools/xai.js';
+export { createGroqToolRegistry } from './tools/groq.js';
+export { createBedrockToolRegistry } from './tools/bedrock.js';
+
+export type { HugrEvents, AgentActivityEvent, ClarificationEvent } from './events/types.js';
+export { TypedEmitter } from './events/emitter.js';
+
+export type { HugrPlugin, PluginContext } from './plugin/types.js';
