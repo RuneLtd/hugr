@@ -1,6 +1,6 @@
 
 import type { Joblog } from '../joblog/Joblog.js';
-import type { LLMProvider } from '../types/llm.js';
+import type { AgentRuntime } from '../runtime/types.js';
 import type { AgentMessage } from '../types/joblog.js';
 import type { InterruptRequest } from '../interrupt/types.js';
 import { readInterrupt, clearInterrupt } from '../interrupt/handler.js';
@@ -13,11 +13,17 @@ export interface AgentConfig {
 
   joblog: Joblog;
 
-  runtime: LLMProvider;
+  runtime: AgentRuntime;
 
   pollInterval?: number;
 
   projectPath?: string;
+
+  retries?: number;
+
+  timeoutMs?: number;
+
+  skillPrefix?: string;
 }
 
 export type MessageInput = Omit<AgentMessage, 'id' | 'timestamp' | 'processed' | 'from'>;
@@ -26,9 +32,12 @@ export abstract class Agent {
   readonly id: string;
   readonly name: string;
   protected readonly joblog: Joblog;
-  protected readonly runtime: LLMProvider;
+  protected readonly runtime: AgentRuntime;
   protected readonly pollInterval: number;
   protected readonly projectPath?: string;
+  protected readonly retries: number;
+  protected readonly timeoutMs?: number;
+  protected readonly skillPrefix?: string;
 
   protected running = false;
   protected stopRequested = false;
@@ -41,6 +50,9 @@ export abstract class Agent {
     this.runtime = config.runtime;
     this.pollInterval = config.pollInterval ?? 1000;
     this.projectPath = config.projectPath;
+    this.retries = config.retries ?? 0;
+    this.timeoutMs = config.timeoutMs;
+    this.skillPrefix = config.skillPrefix;
   }
 
   async run(): Promise<void> {
@@ -53,6 +65,8 @@ export abstract class Agent {
     this.sessionStartTime = new Date();
 
     try {
+      await this.onStart();
+
       while (!this.stopRequested) {
 
         if (this.projectPath) {
@@ -78,10 +92,32 @@ export abstract class Agent {
         for (const message of messages) {
           if (this.stopRequested) break;
 
-          try {
-            await this.handleMessage(message);
-          } catch (error) {
-            await this.handleError(error, message);
+          let lastError: unknown;
+          const attempts = 1 + this.retries;
+
+          for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+              if (this.timeoutMs) {
+                await Promise.race([
+                  this.handleMessage(message),
+                  this.createTimeout(this.timeoutMs),
+                ]);
+              } else {
+                await this.handleMessage(message);
+              }
+              lastError = undefined;
+              break;
+            } catch (error) {
+              lastError = error;
+              if (attempt < attempts) {
+                const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
+                await this.sleep(delay);
+              }
+            }
+          }
+
+          if (lastError) {
+            await this.onError(lastError, message);
           }
 
           await this.joblog.markMessageProcessed(message.id);
@@ -102,6 +138,7 @@ export abstract class Agent {
       }
     } finally {
       this.running = false;
+      await this.onStop();
     }
   }
 
@@ -114,6 +151,14 @@ export abstract class Agent {
   }
 
   protected abstract handleMessage(message: AgentMessage): Promise<void>;
+
+  protected async onStart(): Promise<void> {}
+
+  protected async onStop(): Promise<void> {}
+
+  protected async onError(error: unknown, message: AgentMessage): Promise<void> {
+    await this.handleError(error, message);
+  }
 
   protected async send(message: MessageInput): Promise<AgentMessage> {
     return this.joblog.sendMessage({
@@ -222,5 +267,11 @@ export abstract class Agent {
 
   protected sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private createTimeout(ms: number): Promise<never> {
+    return new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Agent ${this.id} timed out after ${ms}ms`)), ms)
+    );
   }
 }
