@@ -7,6 +7,7 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 
 export interface SkillCreatorActivity {
     type: 'thinking' | 'reading' | 'writing' | 'complete' | 'text';
@@ -19,9 +20,10 @@ export interface SkillCreatorActivity {
 
 export interface SkillCreatorConfig {
     joblog: Joblog;
-    runtime: LLMProvider;
+    runtime: AgentRuntime | LLMProvider;
     pollInterval?: number;
     onActivity?: (activity: SkillCreatorActivity) => void;
+    skillPrefix?: string;
 }
 
 export interface SkillCreatorQuestionsPayload {
@@ -50,8 +52,9 @@ export class SkillCreator extends Agent {
             id: 'hugr-skill-creator',
             name: 'Skill Creator',
             joblog: config.joblog,
-            runtime: config.runtime,
+            runtime: config.runtime as AgentRuntime,
             pollInterval: config.pollInterval,
+            skillPrefix: config.skillPrefix,
         });
         this.onActivity = config.onActivity;
     }
@@ -216,7 +219,8 @@ export class SkillCreator extends Agent {
         const useOpenClaw = this.isOpenClawTask(payload.task);
         const skillCreatorSkill = await loadDefaultSkill(
             useOpenClaw ? 'openclaw-skill-creator' : 'skill-creator',
-            payload.projectPath
+            payload.projectPath,
+            this.skillPrefix
         );
 
         if (!skillCreatorSkill) {

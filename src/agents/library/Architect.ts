@@ -6,6 +6,7 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { ArchitectMode } from '../../config/schema.js';
 import { loadAgentSkills } from '../../utils/skills.js';
@@ -22,12 +23,14 @@ export interface ArchitectActivity {
 
 export interface ArchitectConfig {
     joblog: Joblog;
-    runtime: LLMProvider;
+    runtime: AgentRuntime | LLMProvider;
     pollInterval?: number;
 
     onActivity?: (activity: ArchitectActivity) => void;
 
     skills?: string[];
+
+    skillPrefix?: string;
 }
 
 export interface ArchitectQuestionsPayload {
@@ -62,8 +65,9 @@ export class Architect extends Agent {
             id: 'architect',
             name: 'Architect',
             joblog: config.joblog,
-            runtime: config.runtime,
+            runtime: config.runtime as AgentRuntime,
             pollInterval: config.pollInterval,
+            skillPrefix: config.skillPrefix,
         });
         this.onActivity = config.onActivity;
         this.skills = config.skills ?? [];
@@ -170,7 +174,7 @@ export class Architect extends Agent {
 
         console.log(`   🎯 Skills configured: ${this.skills.length > 0 ? this.skills.join(', ') : 'none (using default)'}`);
 
-        const architectSkill = await loadAgentSkills('architect', payload.projectPath, this.skills.length > 0 ? this.skills : undefined);
+        const architectSkill = await loadAgentSkills('architect', payload.projectPath, this.skills.length > 0 ? this.skills : undefined, this.skillPrefix);
 
         if (!architectSkill) {
             console.log(`   ⚠️  No architect skill found, using default behavior`);

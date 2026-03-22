@@ -3,6 +3,7 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 import type { CustomAgentConfig, ToolAccessLevel, AgentToolName } from '../../config/schema.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
@@ -48,7 +49,7 @@ export interface CustomAgentConstructorConfig {
 
     joblog: Joblog;
 
-    runtime: LLMProvider;
+    runtime: AgentRuntime | LLMProvider;
 
     pollInterval?: number;
 
@@ -76,7 +77,7 @@ export class CustomAgent extends Agent {
             id: config.id,
             name: config.agentConfig.name,
             joblog: config.joblog,
-            runtime: config.runtime,
+            runtime: config.runtime as AgentRuntime,
             pollInterval: config.pollInterval,
             projectPath: config.projectPath,
         });

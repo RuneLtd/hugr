@@ -3,6 +3,7 @@ import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage, JobOutput } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { InterruptRequest } from '../../interrupt/types.js';
@@ -35,7 +36,7 @@ export type CoderActivity = {
 
 export interface CoderConfig {
   joblog: Joblog;
-  runtime: LLMProvider;
+  runtime: AgentRuntime | LLMProvider;
   pollInterval?: number;
 
   projectPath?: string;
@@ -51,6 +52,8 @@ export interface CoderConfig {
   skipGitTracking?: boolean;
 
   skills?: string[];
+
+  skillPrefix?: string;
 }
 
 export class Coder extends Agent {
@@ -66,9 +69,10 @@ export class Coder extends Agent {
       id: 'coder',
       name: 'Coder',
       joblog: config.joblog,
-      runtime: config.runtime,
+      runtime: config.runtime as AgentRuntime,
       pollInterval: config.pollInterval,
       projectPath: config.projectPath,
+      skillPrefix: config.skillPrefix,
     });
 
     this.autoAccept = config.autoAccept ?? true;
@@ -433,11 +437,11 @@ export class Coder extends Agent {
 
       let skillContent: string | undefined;
       if (this.skills.length > 0) {
-        skillContent = await loadAgentSkills('coder', payload.projectPath, this.skills);
+        skillContent = await loadAgentSkills('coder', payload.projectPath, this.skills, this.skillPrefix);
       } else {
-        skillContent = await loadDefaultSkill('coder', payload.projectPath);
+        skillContent = await loadDefaultSkill('coder', payload.projectPath, this.skillPrefix);
         if (!skillContent) {
-          skillContent = await loadDefaultSkill('styling', payload.projectPath);
+          skillContent = await loadDefaultSkill('styling', payload.projectPath, this.skillPrefix);
         }
       }
       console.log(`   Skill loaded: ${!!skillContent} (${(skillContent || '').length} chars)`);
