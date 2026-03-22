@@ -18,8 +18,13 @@
       }
     }
   },
+  "bin": {
+    "hugr-dashboard": "./bin/hugr-dashboard.js"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin",
+    "dashboard"
   ],
   "scripts": {
     "build": "tsup",
