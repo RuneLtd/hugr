@@ -21,6 +21,14 @@ export interface AgentDispatchContext {
     agentTeams: boolean;
 }
 
+export interface HandlerResult {
+    advance: boolean;
+    loopToStep?: number;
+    nextAgentId?: string;
+    fanOut?: string[];
+    metadata?: Record<string, unknown>;
+}
+
 export interface AgentHandler {
     id: string;
 
@@ -33,7 +41,7 @@ export interface AgentHandler {
         message: any,
         payload: any,
         context: AgentDispatchContext,
-    ): Promise<{ advance: boolean; loopToStep?: number }>;
+    ): Promise<HandlerResult>;
 
     getPhaseLabel(): string;
 }
