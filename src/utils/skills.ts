@@ -37,8 +37,9 @@ export async function loadSkills(skillPaths: string[]): Promise<string | undefin
     return parts.length > 0 ? parts.join('\n\n---\n\n') : undefined;
 }
 
-export async function loadDefaultSkill(agentName: string, projectPath: string): Promise<string | undefined> {
-    const fileName = `hugr-${agentName}.md`;
+export async function loadDefaultSkill(agentName: string, projectPath: string, skillPrefix?: string): Promise<string | undefined> {
+    const prefix = skillPrefix || 'hugr';
+    const fileName = `${prefix}-${agentName}.md`;
     const paths = [
         join(projectPath, '.claude', 'skills', fileName),
         join(homedir(), '.claude', 'skills', fileName),
@@ -55,10 +56,11 @@ export async function loadDefaultSkill(agentName: string, projectPath: string): 
 export async function loadAgentSkills(
     agentName: string,
     projectPath: string,
-    configuredSkills?: string[]
+    configuredSkills?: string[],
+    skillPrefix?: string
 ): Promise<string | undefined> {
     if (configuredSkills && configuredSkills.length > 0) {
         return loadSkills(configuredSkills);
     }
-    return loadDefaultSkill(agentName, projectPath);
+    return loadDefaultSkill(agentName, projectPath, skillPrefix);
 }
