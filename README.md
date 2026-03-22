@@ -1,6 +1,44 @@
+<div align="center">
+
+<img src="assets/hugr.png" alt="Hugr" width="200" />
+
 # Hugr
 
-Multi-agent orchestration framework for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Define agent pipelines, compose built-in and custom agents, and run iterative coding sessions with automatic git worktree isolation.
+---
+
+### Multi-Agent Orchestration Framework
+
+Define agent pipelines, compose built-in and custom agents, and run iterative coding sessions with automatic git worktree isolation. Built on [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+
+**One install. One command. Your agents are live.**
+
+[Documentation](#api) · [Quick Start](#quick-start) · [GitHub](https://github.com/RuneLtd/hugr)
+
+![language](https://img.shields.io/badge/language-TypeScript-3178c6)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![version](https://img.shields.io/badge/version-0.1.0-green)
+![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![agents](https://img.shields.io/badge/built--in_agents-6-yellow)
+
+---
+
+> **v0.1.0 — Initial Release (March 2026)**
+>
+> Hugr is functional but still pre-1.0. You may encounter rough edges or breaking changes between minor versions. Pin to a specific version for production use until v1.0. [Report issues here.](https://github.com/RuneLtd/hugr/issues)
+
+---
+
+</div>
+
+## What is Hugr?
+
+---
+
+Hugr is a **multi-agent orchestration framework** for Claude Code — not a chatbot wrapper, not a prompt chain, not a single-agent loop. It is a full pipeline system for autonomous coding agents, built from scratch in TypeScript.
+
+Traditional agent setups wait for you to type something. Hugr runs **structured agent pipelines for you** — an Architect plans, a Coder implements, a Raven reviews, and the cycle repeats until the work is done. All in git worktrees so your main branch stays clean.
+
+The entire framework installs as a **single npm package**. One install, one command, your agents are live.
 
 ## Install
 
@@ -26,18 +64,15 @@ import {
 const projectPath = process.cwd();
 const config = await loadConfig({ projectPath, preset: 'fast' });
 
-// Set up the joblog (message bus between agents)
 const storage = new JsonlStorage('/tmp/hugr-demo');
 const joblog = new Joblog({ storage });
 
-// Create a Claude Code LLM provider
 const llm = new ClaudeCodeProvider({
   projectPath,
   timeout: config.provider.timeout,
   maxRetries: config.provider.maxRetries,
 });
 
-// Create the manager and run a session
 const manager = new Manager({
   joblog,
   llm,
@@ -120,6 +155,8 @@ pipeline:
 
 ## Built-in Agents
 
+---
+
 - **Architect** — analyses the task and produces an implementation plan
 - **Coder** — implements the plan using Claude Code
 - **Raven** — reviews the implementation and sends feedback for refinement loops
@@ -129,12 +166,16 @@ pipeline:
 
 ## How It Works
 
+---
+
 1. The **Manager** receives a task and walks through the configured pipeline steps
 2. Each step dispatches work to an agent via the **Joblog** (a structured message bus backed by JSONL)
 3. Agents run in **git worktrees** so the main branch stays clean
 4. After all steps complete, the Manager merges the worktree back to the base branch
 
 ## API
+
+---
 
 ### `loadConfig(options?)`
 
