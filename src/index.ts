@@ -34,7 +34,8 @@ export {
 
 export { createProvider, registerProvider, listProviders, type ProviderFactoryOptions, type ProviderName } from './llm/factory.js';
 
-export { Agent } from './agents/Agent.js';
+export { Agent, type AgentConfig, type MessageInput } from './agents/Agent.js';
+export { createAgent, type CreateAgentOptions, type MessageHandler } from './agents/factory.js';
 
 export { Manager, type ManagerConfig, type ManagerEvents, type SessionConfig, type SessionState } from './agents/Manager.js';
 
@@ -121,7 +122,15 @@ export type { FileChangeDetector } from './runtime/file-changes.js';
 export { registerRuntime, createRuntime, listRuntimes, type RuntimeName, type RuntimeFactoryOptions } from './runtime/factory.js';
 export { ClaudeCodeRuntime, type ClaudeCodeRuntimeOptions } from './runtime/claude-code/index.js';
 
-export { AgentRegistry, type AgentHandler, type AgentDispatchContext } from './agents/registry.js';
+export { AgentRegistry, type AgentHandler, type AgentDispatchContext, type HandlerResult } from './agents/registry.js';
+
+export {
+    Planner, type PlannerConfig, type PlanResult, type PlanStep,
+    Executor, type ExecutorConfig,
+    Validator, type ValidatorConfig, type ValidationRule, type ValidationResult,
+    Router, type RouterConfig, type Route,
+    Aggregator, type AggregatorConfig, type AggregationStrategy,
+} from './agents/presets/index.js';
 export { ActivityMapper, type MappedActivity, type ToolCategoryFn } from './agents/activity-mapper.js';
 
 export type { VCSProvider, IsolatedWorkspace, IsolationMode } from './vcs/types.js';
