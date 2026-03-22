@@ -2,14 +2,16 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 import { loadAgentSkills } from '../../utils/skills.js';
 
 export interface ReviewerConfig {
 	joblog: Joblog;
-	runtime: LLMProvider;
+	runtime: AgentRuntime | LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: ReviewerActivity) => void;
@@ -19,6 +21,8 @@ export interface ReviewerConfig {
 	skipGitTracking?: boolean;
 
 	skills?: string[];
+
+	skillPrefix?: string;
 }
 
 export type ReviewerActivity = {
@@ -48,75 +52,29 @@ export interface ReviewerResultPayload {
 
 const REVIEWER_TIMEOUT = 0;
 
-export class Reviewer {
-	private readonly joblog: Joblog;
-	private readonly runtime: LLMProvider;
-	private readonly pollInterval: number;
-	private readonly projectPath?: string;
+export class Reviewer extends Agent {
 	private readonly onActivity?: (activity: ReviewerActivity) => void;
 	private readonly agentTeams: boolean;
 	private readonly skipGitTracking: boolean;
 	private readonly skills: string[];
 
-	private running = false;
-	private stopRequested = false;
-
 	constructor(config: ReviewerConfig) {
-		this.joblog = config.joblog;
-		this.runtime = config.runtime;
-		this.pollInterval = config.pollInterval ?? 500;
-		this.projectPath = config.projectPath;
+		super({
+			id: 'reviewer',
+			name: 'Reviewer',
+			joblog: config.joblog,
+			runtime: config.runtime as AgentRuntime,
+			pollInterval: config.pollInterval ?? 500,
+			projectPath: config.projectPath,
+			skillPrefix: config.skillPrefix,
+		});
 		this.onActivity = config.onActivity;
 		this.agentTeams = config.agentTeams ?? false;
 		this.skipGitTracking = config.skipGitTracking ?? false;
 		this.skills = config.skills ?? [];
 	}
 
-	async run(): Promise<void> {
-		if (this.running) {
-			throw new Error('Reviewer is already running');
-		}
-
-		this.running = true;
-		this.stopRequested = false;
-
-		try {
-			while (!this.stopRequested) {
-				const messages = await this.joblog.getMessages('reviewer');
-
-				if (messages.length === 0) {
-					await this.sleep(this.pollInterval);
-					continue;
-				}
-
-				for (const message of messages) {
-					if (this.stopRequested) break;
-
-					try {
-						await this.handleMessage(message);
-					} catch (error) {
-						console.error(
-							`Error handling Reviewer message: ${error instanceof Error ? error.message : String(error)}`,
-						);
-					}
-
-					await this.joblog.markMessageProcessed(message.id);
-				}
-			}
-		} finally {
-			this.running = false;
-		}
-	}
-
-	stop(): void {
-		this.stopRequested = true;
-	}
-
-	private async sleep(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
-	}
-
-	private async handleMessage(message: AgentMessage): Promise<void> {
+	protected async handleMessage(message: AgentMessage): Promise<void> {
 		switch (message.type) {
 			case 'reviewer_request':
 				await this.handleReviewerRequest(message);
@@ -126,6 +84,7 @@ export class Reviewer {
 				await this.send({
 					type: 'health_pong',
 					to: message.from,
+					jobId: message.jobId,
 					payload: { status: 'active', currentTask: message.jobId },
 				});
 				break;
@@ -176,7 +135,7 @@ export class Reviewer {
 
 		console.log(`   🎯 Skills configured: ${this.skills.length > 0 ? this.skills.join(', ') : 'none (using default)'}`);
 
-		const reviewerSkill = await loadAgentSkills('reviewer', payload.projectPath, this.skills.length > 0 ? this.skills : undefined);
+		const reviewerSkill = await loadAgentSkills('reviewer', payload.projectPath, this.skills.length > 0 ? this.skills : undefined, this.skillPrefix);
 
 		if (!reviewerSkill) {
 			console.log(`   ⚠️  No reviewer skill found, using default behavior`);
@@ -235,7 +194,7 @@ export class Reviewer {
 		console.log(`📋 REVIEWER COMPLETE`);
 		console.log(`${'═'.repeat(60)}\n`);
 
-		await this.sendResult(jobId, { summary }, result.sessionId);
+		await this.sendReviewerResult(jobId, { summary }, result.sessionId);
 	}
 
 	private buildReviewerPrompt(payload: ReviewerRequestPayload): string {
@@ -372,17 +331,7 @@ Read through the project codebase and report your findings. Analyze the code and
 		}
 	}
 
-	private async send(message: Omit<AgentMessage, 'id' | 'timestamp' | 'processed' | 'from'>): Promise<void> {
-		await this.joblog.sendMessage({
-			type: message.type as AgentMessage['type'],
-			from: 'reviewer',
-			to: message.to,
-			jobId: message.jobId,
-			payload: message.payload,
-		});
-	}
-
-	private async sendResult(jobId: string, result: ReviewerResultPayload, providerSessionId?: string): Promise<void> {
+	private async sendReviewerResult(jobId: string, result: ReviewerResultPayload, providerSessionId?: string): Promise<void> {
 		await this.send({
 			type: 'task_result',
 			to: 'manager',

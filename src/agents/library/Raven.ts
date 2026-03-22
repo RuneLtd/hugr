@@ -3,15 +3,17 @@ import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadDefaultSkill } from '../../utils/skills.js';
 
+import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { LLMProvider, StreamActivity } from '../../types/llm.js';
+import type { AgentRuntime } from '../../runtime/types.js';
 import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 
 export interface RavenConfig {
 	joblog: Joblog;
-	runtime: LLMProvider;
+	runtime: AgentRuntime | LLMProvider;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: RavenActivity) => void;
@@ -19,6 +21,8 @@ export interface RavenConfig {
 	agentTeams?: boolean;
 
 	skipGitTracking?: boolean;
+
+	skillPrefix?: string;
 }
 
 export type RavenActivity = {
@@ -54,73 +58,27 @@ export interface RavenResultPayload {
 	summary: string;
 }
 
-export class Raven {
-	private readonly joblog: Joblog;
-	private readonly runtime: LLMProvider;
-	private readonly pollInterval: number;
-	private readonly projectPath?: string;
+export class Raven extends Agent {
 	private readonly onActivity?: (activity: RavenActivity) => void;
 	private readonly agentTeams: boolean;
 	private readonly skipGitTracking: boolean;
 
-	private running = false;
-	private stopRequested = false;
-
 	constructor(config: RavenConfig) {
-		this.joblog = config.joblog;
-		this.runtime = config.runtime;
-		this.pollInterval = config.pollInterval ?? 500;
-		this.projectPath = config.projectPath;
+		super({
+			id: 'raven',
+			name: 'Raven',
+			joblog: config.joblog,
+			runtime: config.runtime as AgentRuntime,
+			pollInterval: config.pollInterval ?? 500,
+			projectPath: config.projectPath,
+			skillPrefix: config.skillPrefix,
+		});
 		this.onActivity = config.onActivity;
 		this.agentTeams = config.agentTeams ?? false;
 		this.skipGitTracking = config.skipGitTracking ?? false;
 	}
 
-	async run(): Promise<void> {
-		if (this.running) {
-			throw new Error('Raven is already running');
-		}
-
-		this.running = true;
-		this.stopRequested = false;
-
-		try {
-			while (!this.stopRequested) {
-				const messages = await this.joblog.getMessages('raven');
-
-				if (messages.length === 0) {
-					await this.sleep(this.pollInterval);
-					continue;
-				}
-
-				for (const message of messages) {
-					if (this.stopRequested) break;
-
-					try {
-						await this.handleMessage(message);
-					} catch (error) {
-						console.error(
-							`Error handling Raven message: ${error instanceof Error ? error.message : String(error)}`,
-						);
-					}
-
-					await this.joblog.markMessageProcessed(message.id);
-				}
-			}
-		} finally {
-			this.running = false;
-		}
-	}
-
-	stop(): void {
-		this.stopRequested = true;
-	}
-
-	private async sleep(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
-	}
-
-	private async handleMessage(message: AgentMessage): Promise<void> {
+	protected async handleMessage(message: AgentMessage): Promise<void> {
 		switch (message.type) {
 			case 'raven_request':
 				await this.handleRavenRequest(message);
@@ -130,6 +88,7 @@ export class Raven {
 				await this.send({
 					type: 'health_pong',
 					to: message.from,
+					jobId: message.jobId,
 					payload: { status: 'active', currentTask: message.jobId },
 				});
 				break;
@@ -183,7 +142,7 @@ export class Raven {
 
 	private async runRavenSession(jobId: string, payload: RavenRequestPayload): Promise<void> {
 
-		const ravenSkill = await loadDefaultSkill('raven', payload.projectPath);
+		const ravenSkill = await loadDefaultSkill('raven', payload.projectPath, this.skillPrefix);
 
 		if (!ravenSkill) {
 			console.log(`   ⚠️  No raven skill found, using default behavior`);
@@ -222,7 +181,7 @@ export class Raven {
 
 		if (!result.success) {
 				if (result.sessionLimited) {
-			
+
 				console.log(`   ⚠️  SESSION LIMIT DETECTED IN RAVEN`);
 				await this.send({
 					type: 'task_result',
@@ -304,7 +263,7 @@ export class Raven {
 		console.log(`🐦 RAVEN COMPLETE (done=${ravenResult.done})`);
 		console.log(`${'═'.repeat(60)}\n`);
 
-		await this.sendResult(jobId, ravenResult, result.sessionId);
+		await this.sendRavenResult(jobId, ravenResult, result.sessionId);
 	}
 
 	private buildRavenPrompt(payload: RavenRequestPayload): string {
@@ -496,17 +455,7 @@ Required JSON shape:
 		}
 	}
 
-	private async send(message: Omit<AgentMessage, 'id' | 'timestamp' | 'processed' | 'from'>): Promise<void> {
-		await this.joblog.sendMessage({
-			type: message.type as AgentMessage['type'],
-			from: 'raven',
-			to: message.to,
-			jobId: message.jobId,
-			payload: message.payload,
-		});
-	}
-
-	private async sendResult(jobId: string, result: RavenResultPayload, providerSessionId?: string): Promise<void> {
+	private async sendRavenResult(jobId: string, result: RavenResultPayload, providerSessionId?: string): Promise<void> {
 		await this.send({
 			type: 'task_result',
 			to: 'manager',
