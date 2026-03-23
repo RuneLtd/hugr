@@ -1,5 +1,5 @@
 
-export type BuiltInPresetName = 'fast' | 'balanced' | 'thorough' | 'verified';
+export type BuiltInPresetName = 'fast' | 'balanced' | 'thorough';
 export type PresetName = BuiltInPresetName | (string & {});
 
 export type AutonomyLevel = 'supervised' | 'auto';
