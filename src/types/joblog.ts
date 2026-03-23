@@ -93,6 +93,7 @@ export interface AgentMessage {
     timestamp: Date;
     processed: boolean;
     processedAt?: Date;
+    processedBy?: string[];
 }
 
 export type JoblogEntryType = 'job' | 'message' | 'decision' | 'activity';
@@ -145,7 +146,7 @@ export interface IJoblog {
 
     sendMessage(message: Omit<AgentMessage, 'id' | 'timestamp' | 'processed'>): Promise<AgentMessage>;
     getMessages(agentId: string, unprocessedOnly?: boolean): Promise<AgentMessage[]>;
-    markMessageProcessed(messageId: string): Promise<void>;
+    markMessageProcessed(messageId: string, agentId?: string): Promise<void>;
 
     logDecision(decision: Omit<DecisionEntry, 'id' | 'timestamp'>): Promise<void>;
     logActivity(activity: Omit<ActivityEntry, 'id' | 'timestamp'>): Promise<void>;

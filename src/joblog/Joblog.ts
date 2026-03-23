@@ -353,6 +353,10 @@ export class Joblog implements IJoblog {
       throw new JoblogError(`Job not found: ${id}`, 'JOB_NOT_FOUND');
     }
 
+    if (job.status === 'complete') {
+      throw new JoblogError(`Job already completed: ${id}`, 'INVALID_TRANSITION');
+    }
+
     return this.updateJob(id, {
       status: 'complete',
       completedAt: new Date(),
@@ -364,6 +368,10 @@ export class Joblog implements IJoblog {
     const job = await this.getJob(id);
     if (!job) {
       throw new JoblogError(`Job not found: ${id}`, 'JOB_NOT_FOUND');
+    }
+
+    if (job.status === 'failed') {
+      throw new JoblogError(`Job already failed: ${id}`, 'INVALID_TRANSITION');
     }
 
     return this.updateJob(id, {
@@ -467,7 +475,7 @@ export class Joblog implements IJoblog {
       if (broadcastIds) {
         for (const id of broadcastIds) {
           const m = this.messages.get(id);
-          if (m) messages.push(m);
+          if (m && !(m.processedBy?.includes(agentId))) messages.push(m);
         }
       }
     } else {
@@ -481,10 +489,26 @@ export class Joblog implements IJoblog {
     return messages.map((m) => ({ ...m }));
   }
 
-  async markMessageProcessed(messageId: string): Promise<void> {
+  async markMessageProcessed(messageId: string, agentId?: string): Promise<void> {
     const message = this.messages.get(messageId);
     if (!message) {
       throw new JoblogError(`Message not found: ${messageId}`, 'MESSAGE_NOT_FOUND');
+    }
+
+    if (message.to === 'broadcast' && agentId) {
+      const processedBy = [...(message.processedBy ?? [])];
+      if (!processedBy.includes(agentId)) {
+        processedBy.push(agentId);
+      }
+
+      const updated: AgentMessage = {
+        ...message,
+        processedBy,
+      };
+
+      await this.storage.append(JOBLOG_FILES.messages, updated);
+      this.messages.set(messageId, updated);
+      return;
     }
 
     const updated: AgentMessage = {
