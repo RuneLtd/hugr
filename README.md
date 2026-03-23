@@ -14,7 +14,7 @@ Define agent pipelines for any task. Wire in any LLM provider. Chain autonomous 
 
 **One install. One config. Your agents are live.**
 
-[Quick Start](#quick-start) · [Dashboard](#dashboard) · [Pipelines](#pipelines) · [Workers](#workers) · [Providers](#providers) · [GitHub](https://github.com/RuneLtd/hugr)
+[Quick Start](#quick-start) · [Dashboard](#dashboard) · [Pipelines](#pipelines) · [Workers](#workers) · [Triggers](#triggers) · [Providers](#providers) · [GitHub](https://github.com/RuneLtd/hugr)
 
 ![language](https://img.shields.io/badge/language-TypeScript-3178c6)
 ![license](https://img.shields.io/badge/license-MIT-blue)
@@ -61,7 +61,9 @@ The dashboard gives you:
 
 **Sessions** — pick a workflow, describe a task, and run it. Watch live activity as workers hand off to each other. Respond to clarification questions in real time. Stop sessions mid-run.
 
-**Workers** — browse the built-in library and preset workers, or create your own with a custom name, description, system prompt, and tool selection.
+**Workers** — browse the built-in library and preset workers, or create your own with a custom name, description, system prompt, tool selection, and skill files from anywhere on your filesystem.
+
+**Triggers** — automate workflows with four trigger types: cron schedules, webhooks, HTTP polling, and file system watchers. Create triggers from 20+ built-in templates across content, research, monitoring, devops, data, and communication categories. Enable or disable triggers individually.
 
 **Settings** — configure API keys for all supported providers (OpenAI, Anthropic, Gemini, Mistral, xAI, Groq, AWS Bedrock), manage your data storage path, check runtime status, and set your theme.
 
@@ -197,6 +199,31 @@ Architect (task analysis and planning), Coder (task execution with self-review),
 
 **Preset workers:**
 Planner (decomposes objectives into step-by-step plans), Executor (general-purpose task execution), Validator (checks output against configurable rules), Router (routes tasks to the right worker via rules or LLM judgment), and Aggregator (collects results from multiple workers with collect/merge/vote/summarize strategies).
+
+## Triggers
+
+Hugr can run workflows automatically using four trigger types:
+
+**Cron** — schedule workflows with standard 5-field cron expressions. Supports ranges, steps, and lists.
+
+**Webhook** — expose HTTP endpoints that start workflows when called. Supports path routing, secret validation, method filtering, and payload transforms.
+
+**Poll** — monitor HTTP endpoints at intervals. Filter responses with jq expressions and deduplicate with custom keys.
+
+**Watch** — monitor filesystem paths for changes. Filter by glob pattern and event type (create, modify, delete) with configurable debounce.
+
+The dashboard ships with 20+ trigger templates across content, research, monitoring, devops, data, and communication categories. Or define triggers in code:
+
+```typescript
+import { TriggerEngine } from '@runeltd/hugr';
+
+const engine = new TriggerEngine();
+engine.start({
+  type: 'cron',
+  schedule: '0 9 * * 1-5',
+  workflow: 'daily-report',
+});
+```
 
 ## Providers
 
