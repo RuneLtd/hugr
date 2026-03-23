@@ -5,11 +5,12 @@ import { join } from 'node:path';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { CanUseToolFn } from '../../types/llm.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { ArchitectMode } from '../../config/schema.js';
 import { loadAgentSkills } from '../../utils/skills.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface ArchitectActivity {
     type: 'thinking' | 'reading' | 'question' | 'enhancing' | 'complete';
@@ -23,7 +24,7 @@ export interface ArchitectActivity {
 
 export interface ArchitectConfig {
     joblog: Joblog;
-    runtime: AgentRuntime | LLMProvider;
+    runtime: AgentRuntime;
     pollInterval?: number;
 
     onActivity?: (activity: ArchitectActivity) => void;
@@ -31,6 +32,8 @@ export interface ArchitectConfig {
     skills?: string[];
 
     skillPrefix?: string;
+
+    toolResolver?: ToolResolver;
 }
 
 export interface ArchitectQuestionsPayload {
@@ -65,9 +68,10 @@ export class Architect extends Agent {
             id: 'architect',
             name: 'Architect',
             joblog: config.joblog,
-            runtime: config.runtime as AgentRuntime,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
             skillPrefix: config.skillPrefix,
+            toolResolver: config.toolResolver,
         });
         this.onActivity = config.onActivity;
         this.skills = config.skills ?? [];
@@ -196,23 +200,23 @@ export class Architect extends Agent {
         console.log(`   ${prompt.slice(0, 300)}${prompt.length > 300 ? '...' : ''}`);
         console.log(`   Skill loaded: ${!!architectSkill} (${(architectSkill || '').length} chars)`);
 
-        const result = await (this.runtime as any).execute({
+        const result = await this.runtime.runAgent({
             workdir: payload.projectPath,
             task: prompt,
-            autoAccept: true,
-            skipGitTracking: true,
-            timeout: 0,
-            skillContent: architectSkill,
-            canUseTool,
-            allowedTools: ['Read', 'Glob', 'Grep', 'Write', 'AskUserQuestion', 'Bash'],
-
+            allowedTools: this.resolveTools('full', ['Read', 'Glob', 'Grep', 'Write', 'AskUserQuestion', 'Bash']),
             images: payload.images,
             filePaths: payload.filePaths,
             onActivity: this.onActivity
-                ? (streamActivity: StreamActivity) => {
+                ? (streamActivity: AgentActivity) => {
                       this.handleStreamActivityFn(jobId, streamActivity);
                   }
                 : undefined,
+            runtimeOptions: {
+              autoAccept: true,
+              skipGitTracking: true,
+              skillContent: architectSkill,
+              canUseTool,
+            },
         });
 
         console.log(`\n${'─'.repeat(60)}`);
@@ -221,13 +225,13 @@ export class Architect extends Agent {
         console.log(`   Success: ${result.success}`);
 
         if (!result.success) {
-										if (result.sessionLimited) {
+            if (result.rateLimited) {
                 console.log(`   ⚠️  SESSION LIMIT DETECTED IN ARCHITECT`);
                 await this.sendResult(jobId, {
                     success: false,
-                    error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
+                    error: `Session limit reached${result.rateLimitInfo?.retryAfter ? ` - resets ${result.rateLimitInfo.retryAfter}` : ''}`,
                     sessionLimited: true,
-                    resetTime: result.resetTime,
+                    resetTime: result.rateLimitInfo?.retryAfter,
                 });
                 return;
             }
@@ -284,11 +288,11 @@ export class Architect extends Agent {
                 assumptions: finalOutput.assumptions,
                 mode: payload.architectMode,
             } satisfies ArchitectResultPayload,
-            providerSessionId: result.sessionId,
+            providerSessionId: (result.runtimeMetadata?.sessionId as string | undefined),
         });
     }
 
-    private handleStreamActivityFn(jobId: string, activity: StreamActivity): void {
+    private handleStreamActivityFn(jobId: string, activity: AgentActivity): void {
         if (!this.onActivity) return;
 
         switch (activity.type) {
@@ -366,7 +370,7 @@ export class Architect extends Agent {
                 break;
             case 'error':
                 this.onActivity({
-                    type: 'enhancing',
+                    type: 'thinking',
                     message: `Error: ${activity.content}`,
                     agentId: this.id,
                     jobId,
@@ -420,11 +424,11 @@ export class Architect extends Agent {
             const messages = await this.joblog.getMessages(this.id);
             for (const message of messages) {
                 if (message.type === 'clarification_response') {
-                    await this.joblog.markMessageProcessed(message.id);
+                    await this.joblog.markMessageProcessed(message.id, this.id);
                     const payload = message.payload as ArchitectAnswersPayload;
                     return payload.answers;
                 }
-                await this.joblog.markMessageProcessed(message.id);
+                await this.joblog.markMessageProcessed(message.id, this.id);
             }
             await new Promise(resolve => setTimeout(resolve, this.pollInterval));
         }
@@ -470,8 +474,18 @@ Use AskUserQuestion for all questions — the UI routes them to the user.`;
         enhancedPrompt: string;
         assumptions: string[];
     } {
-
-        return { enhancedPrompt: content.trim(), assumptions: [] };
+        const separator = '\n\n---\n## Assumptions\n';
+        const sepIndex = content.indexOf(separator);
+        if (sepIndex === -1) {
+            return { enhancedPrompt: content.trim(), assumptions: [] };
+        }
+        const prompt = content.slice(0, sepIndex).trim();
+        const assumptionsRaw = content.slice(sepIndex + separator.length).trim();
+        const assumptions = assumptionsRaw
+            .split('\n')
+            .map(line => line.replace(/^- /, '').trim())
+            .filter(Boolean);
+        return { enhancedPrompt: prompt, assumptions };
     }
 
     private extractEnhancedPromptFromTranscript(transcript: string): {
@@ -492,7 +506,11 @@ Use AskUserQuestion for all questions — the UI routes them to the user.`;
     }
 
     private formatEnhancedPromptFile(output: { enhancedPrompt: string; assumptions: string[] }): string {
-        return output.enhancedPrompt;
+        if (output.assumptions.length === 0) {
+            return output.enhancedPrompt;
+        }
+        const assumptionsBlock = output.assumptions.map(a => `- ${a}`).join('\n');
+        return `${output.enhancedPrompt}\n\n---\n## Assumptions\n${assumptionsBlock}`;
     }
 
     private async isEmptyProject(projectPath: string): Promise<boolean> {

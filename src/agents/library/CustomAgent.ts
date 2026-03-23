@@ -2,12 +2,12 @@
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
 import type { CustomAgentConfig, ToolAccessLevel, AgentToolName } from '../../config/schema.js';
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadSkills as loadSkillsUtil } from '../../utils/skills.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface StepOutputPayload {
     done: boolean;
@@ -49,7 +49,7 @@ export interface CustomAgentConstructorConfig {
 
     joblog: Joblog;
 
-    runtime: AgentRuntime | LLMProvider;
+    runtime: AgentRuntime;
 
     pollInterval?: number;
 
@@ -63,6 +63,8 @@ export interface CustomAgentConstructorConfig {
 
     /** Whether this agent is part of a multi-step pipeline (enables structured output) */
     isPipelineAgent?: boolean;
+
+    toolResolver?: ToolResolver;
 }
 
 export class CustomAgent extends Agent {
@@ -77,9 +79,10 @@ export class CustomAgent extends Agent {
             id: config.id,
             name: config.agentConfig.name,
             joblog: config.joblog,
-            runtime: config.runtime as AgentRuntime,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
             projectPath: config.projectPath,
+            toolResolver: config.toolResolver,
         });
 
         this.agentConfig = config.agentConfig;
@@ -190,38 +193,40 @@ export class CustomAgent extends Agent {
                 jobId,
             });
 
-            const result = await (this.runtime as any).execute({
+            const result = await this.runtime.runAgent({
                 workdir: payload.projectPath,
-                sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
                 task: taskPrompt,
                 context,
-                autoAccept: true,
-                agentTeams: this.agentTeams,
-                skillContent,
-                skipGitTracking: this.skipGitTracking,
                 allowedTools,
                 images: payload.images,
                 filePaths: payload.filePaths,
-                onActivity: this.onActivity ? (streamActivity: StreamActivity) => {
+                onActivity: this.onActivity ? (streamActivity: AgentActivity) => {
                     this.handleStreamActivity(jobId, streamActivity);
                 } : undefined,
+                runtimeOptions: {
+                    sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
+                    autoAccept: true,
+                    agentTeams: this.agentTeams,
+                    skillContent,
+                    skipGitTracking: this.skipGitTracking,
+                },
             });
 
             console.log(`\n${'─'.repeat(60)}`);
             console.log(`🔧 ${config.name.toUpperCase()} EXECUTION COMPLETE`);
             console.log(`   Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
             console.log(`   Success: ${result.success}`);
-            console.log(`   Files changed: ${result.filesChanged.length}`);
-            if (result.filesChanged.length > 0) {
-                result.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
-                if (result.filesChanged.length > 5) {
-                    console.log(`     ... and ${result.filesChanged.length - 5} more`);
+            console.log(`   Files changed: ${(result.filesChanged ?? []).length}`);
+            if ((result.filesChanged ?? []).length > 0) {
+                (result.filesChanged ?? []).slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
+                if ((result.filesChanged ?? []).length > 5) {
+                    console.log(`     ... and ${(result.filesChanged ?? []).length - 5} more`);
                 }
             }
 
             if (result.success) {
 
-                if (config.selfReview && result.sessionId) {
+                if (config.selfReview && (result.runtimeMetadata?.sessionId as string | undefined)) {
                     console.log(`\n${'─'.repeat(60)}`);
                     console.log(`🔍 ${config.name.toUpperCase()} SELF-REVIEW`);
                     console.log(`${'─'.repeat(60)}`);
@@ -234,9 +239,8 @@ export class CustomAgent extends Agent {
                         jobId,
                     });
 
-                    const reviewResult = await (this.runtime as any).execute({
+                    const reviewResult = await this.runtime.runAgent({
                         workdir: payload.projectPath,
-                        sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
                         task: `Review the changes you just made. Look for:
 1. Missing functionality — did you implement everything?
 2. Broken imports, type errors, or syntax issues
@@ -246,29 +250,32 @@ export class CustomAgent extends Agent {
 Fix anything you find. Be surgical — don't refactor working code, just fix what's broken.
 If everything looks good, you're done.`,
                         context,
-                        autoAccept: true,
-                        agentTeams: this.agentTeams,
-                        skillContent,
-                        skipGitTracking: true,
                         allowedTools,
-                        resume: result.sessionId,
-                        onActivity: this.onActivity ? (streamActivity: StreamActivity) => {
+                        onActivity: this.onActivity ? (streamActivity: AgentActivity) => {
                             this.handleStreamActivity(jobId, streamActivity);
                         } : undefined,
+                        runtimeOptions: {
+                            sessionProjectPath: payload.sessionProjectPath || (this.projectPath ?? payload.projectPath),
+                            autoAccept: true,
+                            agentTeams: this.agentTeams,
+                            skillContent,
+                            skipGitTracking: true,
+                            resume: (result.runtimeMetadata?.sessionId as string | undefined),
+                        },
                     });
 
                     console.log(`   Self-review: ${reviewResult.success ? 'OK' : 'failed (non-fatal)'}`);
-                    if (reviewResult.filesChanged.length > 0) {
-                        console.log(`   Files fixed: ${reviewResult.filesChanged.length}`);
+                    if ((reviewResult.filesChanged ?? []).length > 0) {
+                        console.log(`   Files fixed: ${(reviewResult.filesChanged ?? []).length}`);
                     }
 
                     if (!reviewResult.success) {
-                        if (reviewResult.sessionLimited) {
+                        if (reviewResult.rateLimited) {
                             await this.sendResult(jobId, {
                                 success: false,
-                                error: `Session limit reached during self-review${reviewResult.resetTime ? ` - resets ${reviewResult.resetTime}` : ''}`,
+                                error: `Session limit reached during self-review${reviewResult.rateLimitInfo?.retryAfter ? ` - resets ${reviewResult.rateLimitInfo.retryAfter}` : ''}`,
                                 sessionLimited: true,
-                                resetTime: reviewResult.resetTime,
+                                resetTime: reviewResult.rateLimitInfo?.retryAfter,
                             });
                             return;
                         }
@@ -277,12 +284,12 @@ If everything looks good, you're done.`,
 
                 console.log(`\n${'═'.repeat(60)}`);
                 console.log(`✅ ${config.name.toUpperCase()} SUCCESS`);
-                console.log(`   Files changed: ${result.filesChanged.length}`);
-                if (result.filesChanged.length > 0) {
-                    result.filesChanged.slice(0, 10).forEach((f: string) => console.log(`     - ${f}`));
-                    if (result.filesChanged.length > 10) console.log(`     ... and ${result.filesChanged.length - 10} more`);
+                console.log(`   Files changed: ${(result.filesChanged ?? []).length}`);
+                if ((result.filesChanged ?? []).length > 0) {
+                    (result.filesChanged ?? []).slice(0, 10).forEach((f: string) => console.log(`     - ${f}`));
+                    if ((result.filesChanged ?? []).length > 10) console.log(`     ... and ${(result.filesChanged ?? []).length - 10} more`);
                 }
-                console.log(`   providerSessionId: ${result.sessionId || 'none'}`);
+                console.log(`   providerSessionId: ${(result.runtimeMetadata?.sessionId as string | undefined) || 'none'}`);
                 console.log(`${'═'.repeat(60)}`);
 
                 let stepOutput: StepOutputPayload | undefined;
@@ -332,14 +339,14 @@ If everything looks good, you're done.`,
                 const resultPayload = {
                     success: true,
                     output: {
-                        files: result.fileChanges.map((change: { path: string; action: string }) => ({
+                        files: (result.fileChanges ?? []).map((change: { path: string; action: string }) => ({
                             path: change.path,
                             action: change.action === 'created' ? 'create' : change.action === 'deleted' ? 'delete' : 'modify',
                             summary: `${change.action} by ${config.name}`,
                         })),
                         summary: stepOutput?.summary || `${config.name} completed: ${payload.task.slice(0, 100)}`,
                     },
-                    providerSessionId: result.sessionId,
+                    providerSessionId: (result.runtimeMetadata?.sessionId as string | undefined),
                     // Pipeline-specific fields
                     ...(stepOutput ? {
                         done: stepOutput.done,
@@ -357,13 +364,13 @@ If everything looks good, you're done.`,
                 await this.sendResult(jobId, resultPayload);
             } else {
 
-                if (result.sessionLimited) {
+                if (result.rateLimited) {
                     console.log(`   ⚠️  SESSION LIMIT DETECTED`);
                     await this.sendResult(jobId, {
                         success: false,
-                        error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
+                        error: `Session limit reached${result.rateLimitInfo?.retryAfter ? ` - resets ${result.rateLimitInfo.retryAfter}` : ''}`,
                         sessionLimited: true,
-                        resetTime: result.resetTime,
+                        resetTime: result.rateLimitInfo?.retryAfter,
                     });
                     return;
                 }
@@ -382,14 +389,14 @@ If everything looks good, you're done.`,
                             await this.sendResult(jobId, {
                                 success: true,
                                 output: {
-                                    files: result.fileChanges.map((change: { path: string; action: string }) => ({
+                                    files: (result.fileChanges ?? []).map((change: { path: string; action: string }) => ({
                                         path: change.path,
                                         action: change.action === 'created' ? 'create' : change.action === 'deleted' ? 'delete' : 'modify',
                                         summary: `${change.action} by ${config.name}`,
                                     })),
                                     summary: stepOutput.summary,
                                 },
-                                providerSessionId: result.sessionId,
+                                providerSessionId: (result.runtimeMetadata?.sessionId as string | undefined),
                                 done: stepOutput.done,
                                 nextPrompt: stepOutput.nextPrompt,
                                 findings: stepOutput.findings,
@@ -422,7 +429,7 @@ If everything looks good, you're done.`,
     }
 
 
-    private handleStreamActivity(jobId: string, activity: StreamActivity): void {
+    private handleStreamActivity(jobId: string, activity: AgentActivity): void {
         if (!this.onActivity) return;
 
         switch (activity.type) {

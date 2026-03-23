@@ -6,8 +6,9 @@ import { loadDefaultSkill } from '../../utils/skills.js';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity, CanUseToolFn } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { CanUseToolFn } from '../../types/llm.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface SkillCreatorActivity {
     type: 'thinking' | 'reading' | 'writing' | 'complete' | 'text';
@@ -20,10 +21,11 @@ export interface SkillCreatorActivity {
 
 export interface SkillCreatorConfig {
     joblog: Joblog;
-    runtime: AgentRuntime | LLMProvider;
+    runtime: AgentRuntime;
     pollInterval?: number;
     onActivity?: (activity: SkillCreatorActivity) => void;
     skillPrefix?: string;
+    toolResolver?: ToolResolver;
 }
 
 export interface SkillCreatorQuestionsPayload {
@@ -52,14 +54,15 @@ export class SkillCreator extends Agent {
             id: 'hugr-skill-creator',
             name: 'Skill Creator',
             joblog: config.joblog,
-            runtime: config.runtime as AgentRuntime,
+            runtime: config.runtime,
             pollInterval: config.pollInterval,
             skillPrefix: config.skillPrefix,
+            toolResolver: config.toolResolver,
         });
         this.onActivity = config.onActivity;
     }
 
-    private handleStreamActivity(jobId: string, activity: StreamActivity): void {
+    private handleStreamActivity(jobId: string, activity: AgentActivity): void {
         if (!this.onActivity) return;
 
         switch (activity.type) {
@@ -133,7 +136,7 @@ export class SkillCreator extends Agent {
                 break;
             case 'error':
                 this.onActivity({
-                    type: 'writing',
+                    type: 'thinking',
                     message: `Error: ${activity.content}`,
                     agentId: this.id,
                     jobId,
@@ -243,23 +246,24 @@ export class SkillCreator extends Agent {
             console.log(`   🔄 Resuming provider session: ${payload.resumeProviderSession}`);
         }
 
-        const result = await (this.runtime as any).execute({
+        const result = await this.runtime.runAgent({
             workdir: payload.projectPath,
             task: prompt,
-            autoAccept: true,
-            skipGitTracking: true,
-            timeout: 0,
-            skillContent: skillCreatorSkill,
-            canUseTool,
-            allowedTools: ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'AskUserQuestion', 'Bash'],
+            allowedTools: this.resolveTools('full', ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'AskUserQuestion', 'Bash']),
             images: payload.images,
             filePaths: payload.filePaths,
-            resume: payload.resumeProviderSession,
             onActivity: this.onActivity
-                ? (streamActivity: StreamActivity) => {
+                ? (streamActivity: AgentActivity) => {
                       this.handleStreamActivity(jobId, streamActivity);
                   }
                 : undefined,
+            runtimeOptions: {
+                autoAccept: true,
+                skipGitTracking: true,
+                skillContent: skillCreatorSkill,
+                canUseTool,
+                resume: payload.resumeProviderSession,
+            },
         });
 
         console.log(`\n${'─'.repeat(60)}`);
@@ -268,13 +272,13 @@ export class SkillCreator extends Agent {
         console.log(`   Success: ${result.success}`);
 
         if (!result.success) {
-										if (result.sessionLimited) {
+            if (result.rateLimited) {
                 console.log(`   ⚠️  SESSION LIMIT DETECTED IN SKILL CREATOR`);
                 await this.sendResult(jobId, {
                     success: false,
-                    error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
+                    error: `Session limit reached${result.rateLimitInfo?.retryAfter ? ` - resets ${result.rateLimitInfo.retryAfter}` : ''}`,
                     sessionLimited: true,
-                    resetTime: result.resetTime,
+                    resetTime: result.rateLimitInfo?.retryAfter,
                 });
                 return;
             }
@@ -290,7 +294,7 @@ export class SkillCreator extends Agent {
                 files: [],
                 summary: this.lastTextContent || 'Skill creation session complete',
             },
-            providerSessionId: result.sessionId,
+            providerSessionId: (result.runtimeMetadata?.sessionId as string | undefined),
         });
     }
 
@@ -339,11 +343,11 @@ export class SkillCreator extends Agent {
             const messages = await this.joblog.getMessages(this.id);
             for (const message of messages) {
                 if (message.type === 'clarification_response') {
-                    await this.joblog.markMessageProcessed(message.id);
+                    await this.joblog.markMessageProcessed(message.id, this.id);
                     const payload = message.payload as SkillCreatorAnswersPayload;
                     return payload.answers;
                 }
-                await this.joblog.markMessageProcessed(message.id);
+                await this.joblog.markMessageProcessed(message.id, this.id);
             }
             await new Promise(resolve => setTimeout(resolve, this.pollInterval));
         }

@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
 import { loadAgentSkills } from '../../utils/skills.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface ReviewerConfig {
 	joblog: Joblog;
-	runtime: AgentRuntime | LLMProvider;
+	runtime: AgentRuntime;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: ReviewerActivity) => void;
@@ -23,6 +23,8 @@ export interface ReviewerConfig {
 	skills?: string[];
 
 	skillPrefix?: string;
+
+	toolResolver?: ToolResolver;
 }
 
 export type ReviewerActivity = {
@@ -63,10 +65,11 @@ export class Reviewer extends Agent {
 			id: 'reviewer',
 			name: 'Reviewer',
 			joblog: config.joblog,
-			runtime: config.runtime as AgentRuntime,
+			runtime: config.runtime,
 			pollInterval: config.pollInterval ?? 500,
 			projectPath: config.projectPath,
 			skillPrefix: config.skillPrefix,
+			toolResolver: config.toolResolver,
 		});
 		this.onActivity = config.onActivity;
 		this.agentTeams = config.agentTeams ?? false;
@@ -147,18 +150,19 @@ export class Reviewer extends Agent {
 
 		console.log(`\n   Launching Claude Code session for code review...`);
 
-		const result = await (this.runtime as any).execute({
+		const result = await this.runtime.runAgent({
 			workdir: payload.projectPath,
-			sessionProjectPath: sessionPath,
 			task: prompt,
-			autoAccept: true,
-			agentTeams: this.agentTeams,
-			skipGitTracking: this.skipGitTracking,
-			timeout: REVIEWER_TIMEOUT,
-			allowedTools: ['Read', 'Glob', 'Grep', 'Bash'],
-			skillContent: reviewerSkill,
+			allowedTools: this.resolveTools('read-only', ['Read', 'Glob', 'Grep', 'Bash']),
+			runtimeOptions: {
+				sessionProjectPath: sessionPath,
+				autoAccept: true,
+				agentTeams: this.agentTeams,
+				skipGitTracking: this.skipGitTracking,
+				skillContent: reviewerSkill,
+			},
 			onActivity: this.onActivity
-				? (streamActivity: StreamActivity) => {
+				? (streamActivity: AgentActivity) => {
 						this.handleStreamActivity(jobId, streamActivity);
 					}
 				: undefined,
@@ -170,7 +174,7 @@ export class Reviewer extends Agent {
 		console.log(`   Success: ${result.success}`);
 
 		if (!result.success) {
-				if (result.sessionLimited) {
+			if (result.rateLimited) {
 				await this.send({
 					type: 'task_result',
 					to: 'manager',
@@ -178,12 +182,14 @@ export class Reviewer extends Agent {
 					payload: {
 						success: false,
 						sessionLimited: true,
-						resetTime: result.resetTime,
+						resetTime: result.rateLimitInfo?.retryAfter,
 						error: 'Session limit reached during code review',
 					},
 				});
 				return;
 			}
+
+			console.warn(`   ⚠️  Reviewer session failed (non-session-limit), attempting to extract summary anyway`);
 		}
 
 		const transcript = result.transcript ?? '';
@@ -194,7 +200,7 @@ export class Reviewer extends Agent {
 		console.log(`📋 REVIEWER COMPLETE`);
 		console.log(`${'═'.repeat(60)}\n`);
 
-		await this.sendReviewerResult(jobId, { summary }, result.sessionId);
+		await this.sendReviewerResult(jobId, { summary }, (result.runtimeMetadata?.sessionId as string | undefined));
 	}
 
 	private buildReviewerPrompt(payload: ReviewerRequestPayload): string {
@@ -219,7 +225,7 @@ Read through the project codebase and report your findings. Analyze the code and
 		return '...' + transcript.slice(-maxLen);
 	}
 
-	private handleStreamActivity(jobId: string, activity: StreamActivity): void {
+	private handleStreamActivity(jobId: string, activity: AgentActivity): void {
 		if (!this.onActivity) return;
 
 		switch (activity.type) {
@@ -243,7 +249,7 @@ Read through the project codebase and report your findings. Analyze the code and
 				this.onActivity({
 					type: activityType,
 					message: `${activity.toolName} ${activity.displayInput}`,
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 					file: undefined,
 					details,
@@ -259,7 +265,7 @@ Read through the project codebase and report your findings. Analyze the code and
 				this.onActivity({
 					type: 'reading',
 					message: activity.content || `${activity.toolName} (${activity.elapsedSeconds}s)`,
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 					details,
 				});
@@ -274,7 +280,7 @@ Read through the project codebase and report your findings. Analyze the code and
 				this.onActivity({
 					type: 'reading',
 					message: activity.stat || activity.content,
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 					details,
 				});
@@ -286,7 +292,7 @@ Read through the project codebase and report your findings. Analyze the code and
 					this.onActivity({
 						type: 'thinking',
 						message: activity.content,
-						agentId: 'reviewer',
+						agentId: this.id,
 						jobId,
 					});
 				}
@@ -296,7 +302,7 @@ Read through the project codebase and report your findings. Analyze the code and
 				this.onActivity({
 					type: 'thinking',
 					message: activity.content,
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 				});
 				break;
@@ -305,7 +311,7 @@ Read through the project codebase and report your findings. Analyze the code and
 				this.onActivity({
 					type: 'thinking',
 					message: `Error: ${activity.content}`,
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 				});
 				break;
@@ -315,14 +321,14 @@ Read through the project codebase and report your findings. Analyze the code and
 					this.onActivity({
 						type: 'agent_summary',
 						message: activity.content,
-						agentId: 'reviewer',
+						agentId: this.id,
 						jobId,
 					});
 				}
 				this.onActivity({
 					type: 'complete',
 					message: 'Code review complete',
-					agentId: 'reviewer',
+					agentId: this.id,
 					jobId,
 					tokenUsage: activity.tokenUsage,
 				});

@@ -6,14 +6,14 @@ import { loadDefaultSkill } from '../../utils/skills.js';
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
 import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface RavenConfig {
 	joblog: Joblog;
-	runtime: AgentRuntime | LLMProvider;
+	runtime: AgentRuntime;
 	pollInterval?: number;
 	projectPath?: string;
 	onActivity?: (activity: RavenActivity) => void;
@@ -23,6 +23,8 @@ export interface RavenConfig {
 	skipGitTracking?: boolean;
 
 	skillPrefix?: string;
+
+	toolResolver?: ToolResolver;
 }
 
 export type RavenActivity = {
@@ -68,10 +70,11 @@ export class Raven extends Agent {
 			id: 'raven',
 			name: 'Raven',
 			joblog: config.joblog,
-			runtime: config.runtime as AgentRuntime,
+			runtime: config.runtime,
 			pollInterval: config.pollInterval ?? 500,
 			projectPath: config.projectPath,
 			skillPrefix: config.skillPrefix,
+			toolResolver: config.toolResolver,
 		});
 		this.onActivity = config.onActivity;
 		this.agentTeams = config.agentTeams ?? false;
@@ -157,21 +160,22 @@ export class Raven extends Agent {
 		console.log(`   Skill loaded: ${!!ravenSkill} (${(ravenSkill || '').length} chars)`);
 		console.log(`\n   Launching Claude Code session for code review...`);
 
-		const result = await (this.runtime as any).execute({
+		const result = await this.runtime.runAgent({
 			workdir: payload.projectPath,
-			sessionProjectPath: sessionPath,
 			task: prompt,
-			autoAccept: true,
-			agentTeams: this.agentTeams,
-			skipGitTracking: this.skipGitTracking,
-			timeout: 0,
-			allowedTools: ['Read', 'Write', 'Glob', 'Grep', 'Bash'],
-			skillContent: ravenSkill,
+			allowedTools: this.resolveTools('full', ['Read', 'Write', 'Glob', 'Grep', 'Bash']),
 			onActivity: this.onActivity
-				? (streamActivity: StreamActivity) => {
+				? (streamActivity: AgentActivity) => {
 						this.handleStreamActivity(jobId, streamActivity);
 					}
 				: undefined,
+			runtimeOptions: {
+				sessionProjectPath: sessionPath,
+				autoAccept: true,
+				agentTeams: this.agentTeams,
+				skipGitTracking: this.skipGitTracking,
+				skillContent: ravenSkill,
+			},
 		});
 
 		console.log(`\n${'─'.repeat(60)}`);
@@ -180,8 +184,7 @@ export class Raven extends Agent {
 		console.log(`   Success: ${result.success}`);
 
 		if (!result.success) {
-				if (result.sessionLimited) {
-
+			if (result.rateLimited) {
 				console.log(`   ⚠️  SESSION LIMIT DETECTED IN RAVEN`);
 				await this.send({
 					type: 'task_result',
@@ -190,12 +193,14 @@ export class Raven extends Agent {
 					payload: {
 						success: false,
 						sessionLimited: true,
-						resetTime: result.resetTime,
+						resetTime: result.rateLimitInfo?.retryAfter,
 						error: `Session limit reached during Raven review (iteration ${payload.iteration})`,
 					},
 				});
 				return;
 			}
+
+			console.warn(`   ⚠️  Raven session failed (non-session-limit), attempting to parse output anyway`);
 		}
 
 		let ravenResult: RavenResultPayload;
@@ -263,7 +268,7 @@ export class Raven extends Agent {
 		console.log(`🐦 RAVEN COMPLETE (done=${ravenResult.done})`);
 		console.log(`${'═'.repeat(60)}\n`);
 
-		await this.sendRavenResult(jobId, ravenResult, result.sessionId);
+		await this.sendRavenResult(jobId, ravenResult, (result.runtimeMetadata?.sessionId as string | undefined));
 	}
 
 	private buildRavenPrompt(payload: RavenRequestPayload): string {
@@ -339,7 +344,7 @@ Required JSON shape:
 		};
 	}
 
-	private handleStreamActivity(jobId: string, activity: StreamActivity): void {
+	private handleStreamActivity(jobId: string, activity: AgentActivity): void {
 		if (!this.onActivity) return;
 
 		switch (activity.type) {
@@ -364,7 +369,7 @@ Required JSON shape:
 				this.onActivity({
 					type: activityType,
 					message: `${activity.toolName} ${activity.displayInput}`,
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 					file: undefined,
 					details,
@@ -380,7 +385,7 @@ Required JSON shape:
 				this.onActivity({
 					type: 'reading',
 					message: activity.content || `${activity.toolName} (${activity.elapsedSeconds}s)`,
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 					details,
 				});
@@ -395,7 +400,7 @@ Required JSON shape:
 				this.onActivity({
 					type: 'reading',
 					message: activity.stat || activity.content,
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 					details,
 				});
@@ -408,7 +413,7 @@ Required JSON shape:
 					this.onActivity({
 						type: 'thinking',
 						message: activity.content,
-						agentId: 'raven',
+						agentId: this.id,
 						jobId,
 					});
 				}
@@ -419,7 +424,7 @@ Required JSON shape:
 				this.onActivity({
 					type: 'thinking',
 					message: activity.content,
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 				});
 				break;
@@ -428,7 +433,7 @@ Required JSON shape:
 				this.onActivity({
 					type: 'thinking',
 					message: `Error: ${activity.content}`,
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 				});
 				break;
@@ -439,14 +444,14 @@ Required JSON shape:
 					this.onActivity({
 						type: 'agent_summary',
 						message: activity.content,
-						agentId: 'raven',
+						agentId: this.id,
 						jobId,
 					});
 				}
 				this.onActivity({
 					type: 'complete',
 					message: 'Review complete',
-					agentId: 'raven',
+					agentId: this.id,
 					jobId,
 					tokenUsage: activity.tokenUsage,
 				});

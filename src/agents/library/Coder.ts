@@ -2,15 +2,15 @@
 import { Agent } from '../Agent.js';
 import type { Joblog } from '../../joblog/Joblog.js';
 import type { AgentMessage, JobOutput } from '../../types/joblog.js';
-import type { LLMProvider, StreamActivity } from '../../types/llm.js';
-import type { AgentRuntime } from '../../runtime/types.js';
+import type { AgentRuntime, AgentActivity } from '../../runtime/types.js';
 import { AGENT_OUTPUT_FILES } from '../../constants.js';
 import { resolveSessionDataDir } from '../../paths.js';
 import type { InterruptRequest } from '../../interrupt/types.js';
 import { commitAll } from '../../git/index.js';
-import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadAgentSkills, loadDefaultSkill } from '../../utils/skills.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface HookState {
   jobId: string;
@@ -36,7 +36,7 @@ export type CoderActivity = {
 
 export interface CoderConfig {
   joblog: Joblog;
-  runtime: AgentRuntime | LLMProvider;
+  runtime: AgentRuntime;
   pollInterval?: number;
 
   projectPath?: string;
@@ -54,6 +54,8 @@ export interface CoderConfig {
   skills?: string[];
 
   skillPrefix?: string;
+
+  toolResolver?: ToolResolver;
 }
 
 export class Coder extends Agent {
@@ -69,10 +71,11 @@ export class Coder extends Agent {
       id: 'coder',
       name: 'Coder',
       joblog: config.joblog,
-      runtime: config.runtime as AgentRuntime,
+      runtime: config.runtime,
       pollInterval: config.pollInterval,
       projectPath: config.projectPath,
       skillPrefix: config.skillPrefix,
+      toolResolver: config.toolResolver,
     });
 
     this.autoAccept = config.autoAccept ?? true;
@@ -206,7 +209,7 @@ export class Coder extends Agent {
     }
   }
 
-  private handleStreamActivity(jobId: string, activity: StreamActivity): void {
+  private handleStreamActivity(jobId: string, activity: AgentActivity): void {
     if (!this.onActivity) return;
 
     switch (activity.type) {
@@ -475,42 +478,44 @@ export class Coder extends Agent {
         jobId,
       });
 
-      const result = await (this.runtime as any).execute({
+      const result = await this.runtime.runAgent({
         workdir: payload.projectPath,
-        sessionProjectPath: sessionPath,
         task: taskPrompt,
         context,
-        autoAccept: this.autoAccept,
-        agentTeams: this.agentTeams,
-        skillContent,
-        skipGitTracking: this.skipGitTracking,
-        resume: resumeSessionId,
         images: payload.images,
         filePaths: payload.filePaths,
-        onSessionInit: (sdkSessionId: string) => {
-
-          this.writeHook(sessionPath, {
-            jobId,
-            task: payload.task,
-            projectPath: payload.projectPath,
-            startedAt: new Date().toISOString(),
-            sdkSessionId,
-          }).catch(err => console.warn('   ⚠️ Failed to update hook with SDK session ID:', err));
-        },
-        onActivity: this.onActivity ? (streamActivity: StreamActivity) => {
+        onActivity: this.onActivity ? (streamActivity: AgentActivity) => {
           this.handleStreamActivity(jobId, streamActivity);
         } : undefined,
+        runtimeOptions: {
+          sessionProjectPath: sessionPath,
+          autoAccept: this.autoAccept,
+          agentTeams: this.agentTeams,
+          skipGitTracking: this.skipGitTracking,
+          skillContent,
+          resume: resumeSessionId,
+          onSessionInit: (sdkSessionId: string) => {
+
+            this.writeHook(sessionPath, {
+              jobId,
+              task: payload.task,
+              projectPath: payload.projectPath,
+              startedAt: new Date().toISOString(),
+              sdkSessionId,
+            }).catch(err => console.warn('   ⚠️ Failed to update hook with SDK session ID:', err));
+          },
+        },
       });
 
       console.log(`\n${'─'.repeat(60)}`);
       console.log(`🤖 CODER IMPLEMENTATION COMPLETE`);
       console.log(`   Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
       console.log(`   Success: ${result.success}`);
-      console.log(`   Files changed: ${result.filesChanged.length}`);
-      if (result.filesChanged.length > 0) {
-        result.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
-        if (result.filesChanged.length > 5) {
-          console.log(`     ... and ${result.filesChanged.length - 5} more`);
+      console.log(`   Files changed: ${(result.filesChanged ?? []).length}`);
+      if ((result.filesChanged ?? []).length > 0) {
+        (result.filesChanged ?? []).slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
+        if ((result.filesChanged ?? []).length > 5) {
+          console.log(`     ... and ${(result.filesChanged ?? []).length - 5} more`);
         }
       }
       if (result.error) {
@@ -519,7 +524,7 @@ export class Coder extends Agent {
 
       if (result.success) {
 
-        const implementationSessionId = result.sessionId;
+        const implementationSessionId = (result.runtimeMetadata?.sessionId as string | undefined);
 
         if (!this.selfReview) {
           console.log(`   ⏭️ Self-review disabled — skipping`);
@@ -535,9 +540,8 @@ export class Coder extends Agent {
             jobId,
           });
 
-          const reviewResult = await (this.runtime as any).execute({
+          const reviewResult = await this.runtime.runAgent({
             workdir: payload.projectPath,
-            sessionProjectPath: sessionPath,
             task: `Review the code you just wrote. Look for:
 1. Missing functionality — did you implement everything that was asked for?
 2. Broken imports, type errors, or syntax issues
@@ -549,35 +553,38 @@ Fix anything you find. Be surgical — don't refactor or restructure working cod
 
 If everything looks good and runs without errors, you're done.`,
             context,
-            autoAccept: this.autoAccept,
-            agentTeams: this.agentTeams,
-            skillContent,
-            skipGitTracking: true,
-            resume: implementationSessionId,
-            onActivity: this.onActivity ? (streamActivity: StreamActivity) => {
+            onActivity: this.onActivity ? (streamActivity: AgentActivity) => {
               this.handleStreamActivity(jobId, streamActivity);
             } : undefined,
+            runtimeOptions: {
+              sessionProjectPath: sessionPath,
+              autoAccept: this.autoAccept,
+              agentTeams: this.agentTeams,
+              skillContent,
+              skipGitTracking: true,
+              resume: implementationSessionId,
+            },
           });
 
           console.log(`\n${'─'.repeat(60)}`);
           console.log(`🔍 CODER SELF-REVIEW COMPLETE`);
           console.log(`   Duration: ${(reviewResult.durationMs / 1000).toFixed(1)}s`);
           console.log(`   Success: ${reviewResult.success}`);
-          if (reviewResult.filesChanged.length > 0) {
-            console.log(`   Files fixed: ${reviewResult.filesChanged.length}`);
-            reviewResult.filesChanged.slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
+          if ((reviewResult.filesChanged ?? []).length > 0) {
+            console.log(`   Files fixed: ${(reviewResult.filesChanged ?? []).length}`);
+            (reviewResult.filesChanged ?? []).slice(0, 5).forEach((f: string) => console.log(`     - ${f}`));
           }
           console.log(`${'─'.repeat(60)}`);
 
           if (!reviewResult.success) {
             console.warn(`   ⚠️ Self-review session failed, continuing with implementation result`);
 
-            if (reviewResult.sessionLimited) {
+            if (reviewResult.rateLimited) {
               await this.sendResult(jobId, {
                 success: false,
-                error: `Session limit reached during self-review${reviewResult.resetTime ? ` - resets ${reviewResult.resetTime}` : ''}`,
+                error: `Session limit reached during self-review${reviewResult.rateLimitInfo?.retryAfter ? ` - resets ${reviewResult.rateLimitInfo.retryAfter}` : ''}`,
                 sessionLimited: true,
-                resetTime: reviewResult.resetTime,
+                resetTime: reviewResult.rateLimitInfo?.retryAfter,
               });
               return;
             }
@@ -588,18 +595,18 @@ If everything looks good and runs without errors, you're done.`,
 
         await this.clearHook(sessionPath);
 
-        const ACTION_MAP: Record<string, string> = { created: 'create', modified: 'modify', deleted: 'delete' };
+        const ACTION_MAP: Record<string, 'create' | 'modify' | 'delete'> = { created: 'create', modified: 'modify', deleted: 'delete' };
         const jobOutput: JobOutput = {
-          files: result.fileChanges.map((change: { path: string; action: string }) => ({
+          files: (result.fileChanges ?? []).map((change: { path: string; action: string }) => ({
             path: change.path,
-            action: ACTION_MAP[change.action] ?? 'modify',
+            action: ACTION_MAP[change.action] ?? 'modify' as const,
             summary: `${change.action.charAt(0).toUpperCase() + change.action.slice(1)} during implementation`,
           })),
           summary: `Completed: ${payload.task}`,
         };
 
         await this.logActivity(jobId, 'file_write', {
-          filesChanged: result.filesChanged,
+          filesChanged: result.filesChanged ?? [],
         });
 
         console.log(`\n${'═'.repeat(60)}`);
@@ -609,29 +616,29 @@ If everything looks good and runs without errors, you're done.`,
         jobOutput.files.slice(0, 10).forEach(f => console.log(`     ${f.action}: ${f.path}`));
         if (jobOutput.files.length > 10) console.log(`     ... and ${jobOutput.files.length - 10} more`);
         console.log(`   Summary: ${jobOutput.summary.slice(0, 150)}`);
-        console.log(`   providerSessionId: ${result.sessionId || 'none'}`);
+        console.log(`   providerSessionId: ${(result.runtimeMetadata?.sessionId as string | undefined) || 'none'}`);
         console.log(`${'═'.repeat(60)}\n`);
 
         await this.sendResult(jobId, {
           success: true,
           output: jobOutput,
-          providerSessionId: result.sessionId,
+          providerSessionId: (result.runtimeMetadata?.sessionId as string | undefined),
         });
       } else {
 
-        if (result.sessionLimited) {
+        if (result.rateLimited) {
           console.log(`\n${'═'.repeat(60)}`);
           console.log(`⚠️  SESSION LIMIT DETECTED`);
-          if (result.resetTime) {
-            console.log(`   Resets: ${result.resetTime}`);
+          if (result.rateLimitInfo?.retryAfter) {
+            console.log(`   Resets: ${result.rateLimitInfo.retryAfter}`);
           }
           console.log(`${'═'.repeat(60)}\n`);
 
           await this.sendResult(jobId, {
             success: false,
-            error: `Session limit reached${result.resetTime ? ` - resets ${result.resetTime}` : ''}`,
+            error: `Session limit reached${result.rateLimitInfo?.retryAfter ? ` - resets ${result.rateLimitInfo.retryAfter}` : ''}`,
             sessionLimited: true,
-            resetTime: result.resetTime,
+            resetTime: result.rateLimitInfo?.retryAfter,
           });
           return;
         }
