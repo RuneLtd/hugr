@@ -2,6 +2,7 @@
 
 import { Flex, Box } from '@chakra-ui/react';
 import { Sidebar } from './Sidebar';
+import { HelperChat } from './HelperChat';
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {children}
         </Box>
       </Box>
+      <HelperChat />
     </Flex>
   );
 }

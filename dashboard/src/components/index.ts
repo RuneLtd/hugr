@@ -6,3 +6,4 @@ export { StatusBadge } from './StatusBadge';
 export { WorkerBadge } from './WorkerBadge';
 export { ActivityFeed, type ActivityItem } from './ActivityFeed';
 export { WorkflowVisual } from './WorkflowVisual';
+export { HelperChat } from './HelperChat';
