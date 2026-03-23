@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.2
+
+**Added**
+- TriggerRunner — high-level orchestrator that wires trigger events to full Manager sessions with pipeline and agent setup
+- `Manager.loadPersistedState(projectPath)` — static method for restoring the latest session state from disk
+- Global `enabled` flag on TriggerEngineConfig to disable all triggers at once
+- `pipelineFromTemplate()` — creates a PipelineConfig from a trigger template's embedded pipeline definition
+- Trigger config merging in the YAML config loader
+- `resolvePath` shared utility extracted from TriggerEngine and WebhookTrigger
+- HelperChat component and `/api/helper` route for in-dashboard AI assistance
+- Cron schedule helpers — `scheduleToCron`, `cronToSchedule`, `describeSchedule` with frequency presets (daily, weekdays, weekends, specific days, monthly, hourly)
+- `hugrLoader` module for lazy-loading `@runeltd/hugr` in the dashboard
+- `triggerScheduler` module for managing trigger engine lifecycle from the dashboard
+- Trigger status API endpoint (`/api/triggers/status`)
+- Skill file picker on the worker editor with browse-for-file support
+- TriggerRunner integration tests
+
+**Improved**
+- Triggers page redesigned with schedule builder, template picker, and workflow assignment
+- Dashboard overview expanded with activity feed and trigger stats
+- Poll trigger now batches all items into a single event instead of firing per-item
+- Watch trigger detects file deletes by checking stat on rename events
+- Webhook server now auto-creates on first webhook trigger registration instead of requiring pre-init
+- Trigger templates now embed pipeline metadata for automatic workflow creation
+- Session polling reduced from 1s to 2s and skips when the browser tab is hidden
+- Workflow editor and shared components updated for consistency
+- Root job is now started before completion to prevent invalid state transitions
+
+**Fixed**
+- Webhook server not initializing when the first webhook trigger was registered (inverted condition)
+- Silent catch blocks in dashboard replaced with `console.warn` for debuggability
+- React list key warnings in session history and workflow editor
+- Agent config shape mismatch in session API (`description`/`systemPrompt`/`tools` → `instructions`/`toolAccess`/`allowedTools`)
+- Duplicate "verified" preset redundancy removed
+
 ## 0.1.1
 
 Initial release — March 2026

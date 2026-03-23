@@ -23,7 +23,7 @@ Define workers for any task. Wire in any LLM provider. Chain autonomous workers 
 
 ---
 
-**v0.1.0 — March 2026** · Hugr is functional but still pre-1.0. Expect rough edges and breaking changes between minor versions. Pin to a specific version for production use until v1.0. [Report issues here.](https://github.com/RuneLtd/hugr/issues)
+**v0.1.2 — March 2026** · Hugr is functional but still pre-1.0. Expect rough edges and breaking changes between minor versions. Pin to a specific version for production use until v1.0. [Report issues here.](https://github.com/RuneLtd/hugr/issues)
 
 ---
 
