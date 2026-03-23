@@ -7,7 +7,7 @@ import {
 } from '@chakra-ui/react';
 import { Shell, Card, PageHeader } from '@/components';
 import { agentColors } from '@/lib/colors';
-import { Plus, Save, Trash2, X, Pencil, ChevronDown, Check } from 'lucide-react';
+import { Plus, Save, Trash2, X, Pencil, ChevronDown, Check, FolderOpen } from 'lucide-react';
 import type { ToolDefinition } from '@/lib/providerTools';
 
 interface WorkerInfo {
@@ -17,6 +17,7 @@ interface WorkerInfo {
   description: string;
   systemPrompt?: string;
   tools?: string[];
+  skills?: string[];
 }
 
 const BUILT_IN_WORKERS: WorkerInfo[] = [
@@ -82,6 +83,7 @@ interface EditingWorker {
   description: string;
   systemPrompt: string;
   tools: string[];
+  skills: string[];
   selfReview?: boolean;
   skipGitTracking?: boolean;
 }
@@ -92,6 +94,7 @@ const EMPTY_WORKER: EditingWorker = {
   description: '',
   systemPrompt: '',
   tools: [],
+  skills: [],
 };
 
 export default function WorkersPage() {
@@ -114,7 +117,7 @@ export default function WorkersPage() {
   }, []);
 
   function startCreate() {
-    setEditing({ ...EMPTY_WORKER, id: `worker-${Date.now()}`, tools: [] });
+    setEditing({ ...EMPTY_WORKER, id: `worker-${Date.now()}`, tools: [], skills: [] });
     setIsNew(true);
   }
 
@@ -125,6 +128,7 @@ export default function WorkersPage() {
       description: worker.description,
       systemPrompt: worker.systemPrompt ?? '',
       tools: worker.tools ?? [],
+      skills: worker.skills ?? [],
       selfReview: (worker as any).selfReview,
       skipGitTracking: (worker as any).skipGitTracking,
     });
@@ -150,6 +154,7 @@ export default function WorkersPage() {
       description: editing.description.trim(),
       systemPrompt: editing.systemPrompt.trim() || undefined,
       tools: editing.tools,
+      skills: editing.skills.length > 0 ? editing.skills : undefined,
     };
     if (editing.id === 'coder') {
       record.selfReview = editing.selfReview ?? false;
@@ -274,6 +279,16 @@ export default function WorkersPage() {
                 available={availableTools}
                 selected={editing.tools}
                 onChange={(tools) => setEditing({ ...editing, tools })}
+              />
+            </Box>
+
+            <Box>
+              <Text fontSize="xs" color="text.muted" mb={1}>
+                Skills
+              </Text>
+              <SkillFilePicker
+                skills={editing.skills}
+                onChange={(skills) => setEditing({ ...editing, skills })}
               />
             </Box>
 
@@ -575,6 +590,91 @@ function ToolMultiSelect({
           )}
         </Box>
       )}
+    </Box>
+  );
+}
+
+function SkillFilePicker({
+  skills,
+  onChange,
+}: {
+  skills: string[];
+  onChange: (skills: string[]) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+
+  async function openFilePicker() {
+    if (picking) return;
+    setPicking(true);
+    try {
+      const res = await fetch('/api/file-picker', { method: 'POST' });
+      const data = await res.json();
+      if (!data.cancelled && data.paths?.length > 0) {
+        const unique = new Set(skills);
+        for (const p of data.paths) {
+          unique.add(p);
+        }
+        onChange(Array.from(unique));
+      }
+    } catch {} finally {
+      setPicking(false);
+    }
+  }
+
+  function removeSkill(path: string) {
+    onChange(skills.filter((s) => s !== path));
+  }
+
+  function fileName(path: string) {
+    return path.split('/').pop() ?? path;
+  }
+
+  return (
+    <Box>
+      {skills.length > 0 && (
+        <VStack spacing={1.5} align="stretch" mb={2}>
+          {skills.map((skill) => (
+            <Flex
+              key={skill}
+              align="center"
+              gap={2}
+              px={3}
+              py={1.5}
+              bg="bg.tertiary"
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.subtle"
+            >
+              <Text fontSize="xs" fontWeight="500" color="text.primary" isTruncated>
+                {fileName(skill)}
+              </Text>
+              <Text fontSize="10px" color="text.subtle" flex={1} isTruncated>
+                {skill}
+              </Text>
+              <Box
+                as="span"
+                cursor="pointer"
+                flexShrink={0}
+                color="text.subtle"
+                onClick={() => removeSkill(skill)}
+                _hover={{ color: 'text.primary' }}
+              >
+                <X size={12} />
+              </Box>
+            </Flex>
+          ))}
+        </VStack>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        leftIcon={<FolderOpen size={14} />}
+        onClick={openFilePicker}
+        isLoading={picking}
+        loadingText="Selecting..."
+      >
+        Browse for skill files
+      </Button>
     </Box>
   );
 }

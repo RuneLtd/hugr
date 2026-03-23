@@ -82,6 +82,7 @@ export interface CustomAgentRecord {
   description: string;
   systemPrompt?: string;
   tools?: string[];
+  skills?: string[];
   selfReview?: boolean;
   skipGitTracking?: boolean;
   createdAt?: string;
