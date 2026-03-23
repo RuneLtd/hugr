@@ -4,6 +4,7 @@ import type { AgentRuntime } from '../runtime/types.js';
 import type { AgentMessage } from '../types/joblog.js';
 import type { InterruptRequest } from '../interrupt/types.js';
 import { readInterrupt, clearInterrupt } from '../interrupt/handler.js';
+import type { ToolResolver, ToolAccessLevel } from '../tools/types.js';
 
 export interface AgentConfig {
 
@@ -24,6 +25,8 @@ export interface AgentConfig {
   timeoutMs?: number;
 
   skillPrefix?: string;
+
+  toolResolver?: ToolResolver;
 }
 
 export type MessageInput = Omit<AgentMessage, 'id' | 'timestamp' | 'processed' | 'from'>;
@@ -38,6 +41,7 @@ export abstract class Agent {
   protected readonly retries: number;
   protected readonly timeoutMs?: number;
   protected readonly skillPrefix?: string;
+  protected readonly toolResolver?: ToolResolver;
 
   protected running = false;
   protected stopRequested = false;
@@ -53,6 +57,11 @@ export abstract class Agent {
     this.retries = config.retries ?? 0;
     this.timeoutMs = config.timeoutMs;
     this.skillPrefix = config.skillPrefix;
+    this.toolResolver = config.toolResolver;
+  }
+
+  protected resolveTools(accessLevel: ToolAccessLevel, fallback: string[]): string[] {
+    return this.toolResolver?.resolveTools(accessLevel) ?? fallback;
   }
 
   async run(): Promise<void> {
@@ -120,7 +129,7 @@ export abstract class Agent {
             await this.onError(lastError, message);
           }
 
-          await this.joblog.markMessageProcessed(message.id);
+          await this.joblog.markMessageProcessed(message.id, this.id);
 
           if (this.projectPath) {
             const interrupt = await readInterrupt(this.projectPath, this.sessionStartTime);
