@@ -292,6 +292,45 @@ export class Manager {
         };
     }
 
+    static async loadPersistedState(projectPath: string): Promise<SessionState | null> {
+        try {
+            const sessionDataDir = join(projectPath, '.hugr-session');
+            const { readdir } = await import('node:fs/promises');
+            const entries = await readdir(sessionDataDir, { withFileTypes: true });
+            const sessionDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+
+            let latestState: SessionState | null = null;
+            let latestTime = 0;
+
+            for (const dir of sessionDirs) {
+                try {
+                    const content = await readFile(
+                        join(sessionDataDir, dir, 'state.json'),
+                        'utf-8'
+                    );
+                    const state = JSON.parse(content) as SessionState;
+                    state.startedAt = new Date(state.startedAt);
+                    if (state.completedAt) {
+                        state.completedAt = new Date(state.completedAt);
+                    }
+                    if (state.sessionLimitInfo) {
+                        state.sessionLimitInfo.hitAt = new Date(state.sessionLimitInfo.hitAt);
+                    }
+                    const time = state.startedAt.getTime();
+                    if (time > latestTime) {
+                        latestTime = time;
+                        latestState = state;
+                    }
+                } catch {
+                }
+            }
+
+            return latestState;
+        } catch {
+            return null;
+        }
+    }
+
     async startSession(config: SessionConfig): Promise<string> {
         if (this.session?.status === 'running') {
             throw new Error('A session is already running');
@@ -1316,6 +1355,10 @@ export class Manager {
         await this.persistState();
 
         if (this.rootJobId) {
+            const rootJob = await this.joblog.getJob(this.rootJobId);
+            if (rootJob?.status === 'pending') {
+                await this.joblog.startJob(this.rootJobId, 'manager');
+            }
             if (status === 'completed') {
                 await this.joblog.completeJob(this.rootJobId, {
                     files: [],
