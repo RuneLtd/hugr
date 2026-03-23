@@ -10,7 +10,7 @@
 
 ### Agent Workflow Framework
 
-Define agent pipelines for any task. Wire in any LLM provider. Chain autonomous agents together into workflows that get things done.
+Define workers for any task. Wire in any LLM provider. Chain autonomous workers together into workflows that get things done.
 
 **One install. One config. Your agents are live.**
 
