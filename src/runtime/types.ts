@@ -1,3 +1,5 @@
+import type { ToolResolver } from '../tools/types.js';
+
 export interface ImageAttachment {
     id?: string;
     name: string;
@@ -84,6 +86,7 @@ export interface AgentRuntime {
     complete?(prompt: string, options?: CompletionOptions): Promise<CompletionResult>;
     stream?(prompt: string, options?: CompletionOptions): AsyncIterable<string>;
     listModels?(): Promise<ModelInfo[]>;
+    getToolRegistry?(): ToolResolver;
 }
 
 export class RuntimeError extends Error {

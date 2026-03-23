@@ -14,17 +14,13 @@ type RuntimeFactory = (options: RuntimeFactoryOptions) => AgentRuntime | Promise
 
 const registry = new Map<string, RuntimeFactory>();
 
-export function registerRuntime(name: string, factory: RuntimeFactory): void {
-    registry.set(name, factory);
-}
+let builtinsRegistered = false;
 
-export async function createRuntime(name: RuntimeName, options: RuntimeFactoryOptions = {}): Promise<AgentRuntime> {
-    const factory = registry.get(name);
-    if (factory) {
-        return factory(options);
-    }
+function ensureBuiltins(): void {
+    if (builtinsRegistered) return;
+    builtinsRegistered = true;
 
-    if (name === 'claude-code') {
+    registry.set('claude-code', async (options: RuntimeFactoryOptions) => {
         const { ClaudeCodeRuntime } = await import('./claude-code/runtime.js');
         return new ClaudeCodeRuntime({
             cliPath: options.cliPath,
@@ -34,14 +30,28 @@ export async function createRuntime(name: RuntimeName, options: RuntimeFactoryOp
             queryTimeout: options.timeout,
             executeTimeout: options.timeout ? options.timeout * 6 : undefined,
         });
+    });
+}
+
+export function registerRuntime(name: string, factory: RuntimeFactory): void {
+    ensureBuiltins();
+    registry.set(name, factory);
+}
+
+export async function createRuntime(name: RuntimeName, options: RuntimeFactoryOptions = {}): Promise<AgentRuntime> {
+    ensureBuiltins();
+    const factory = registry.get(name);
+    if (factory) {
+        return factory(options);
     }
 
     throw new Error(
-        `Unknown runtime "${name}". Available: ${['claude-code', ...registry.keys()].join(', ')}. ` +
+        `Unknown runtime "${name}". Available: ${[...registry.keys()].join(', ')}. ` +
         `Use registerRuntime() to add custom runtimes.`
     );
 }
 
 export function listRuntimes(): string[] {
-    return ['claude-code', ...registry.keys()];
+    ensureBuiltins();
+    return [...registry.keys()];
 }

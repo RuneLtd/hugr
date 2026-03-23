@@ -1,6 +1,8 @@
 import { ClaudeCodeProvider, type ClaudeCodeConfig, type QueryResult, type LimitCheckResult } from '../../llm/claude-code.js';
 import type { AgentRuntime, AgentRunOptions, AgentRunResult, CompletionOptions, CompletionResult } from '../types.js';
 import type { ExecuteOptions } from '../../types/llm.js';
+import { createClaudeCodeToolRegistry } from '../../tools/claude-code.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export { ClaudeCodeConfig, QueryResult, LimitCheckResult };
 
@@ -16,6 +18,10 @@ export interface ClaudeCodeRuntimeOptions extends AgentRunOptions {
 }
 
 export class ClaudeCodeRuntime extends ClaudeCodeProvider implements AgentRuntime {
+    getToolRegistry(): ToolResolver {
+        return createClaudeCodeToolRegistry();
+    }
+
     async runAgent(options: AgentRunOptions): Promise<AgentRunResult> {
         const runtimeOpts = (options.runtimeOptions ?? {}) as Partial<ClaudeCodeRuntimeOptions>;
 
