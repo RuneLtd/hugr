@@ -1,4 +1,3 @@
-
 import type { LLMProvider } from '../types/llm.js';
 
 export type ProviderName = 'claude-code' | (string & {});
@@ -15,17 +14,13 @@ type ProviderFactory = (options: ProviderFactoryOptions) => LLMProvider | Promis
 
 const registry = new Map<string, ProviderFactory>();
 
-export function registerProvider(name: string, factory: ProviderFactory): void {
-    registry.set(name, factory);
-}
+let builtinsRegistered = false;
 
-export async function createProvider(name: ProviderName, options: ProviderFactoryOptions = {}): Promise<LLMProvider> {
-    const factory = registry.get(name);
-    if (factory) {
-        return factory(options);
-    }
+function ensureBuiltins(): void {
+    if (builtinsRegistered) return;
+    builtinsRegistered = true;
 
-    if (name === 'claude-code') {
+    registry.set('claude-code', async (options: ProviderFactoryOptions) => {
         const { ClaudeCodeProvider } = await import('./claude-code.js');
         return new ClaudeCodeProvider({
             cliPath: options.cliPath,
@@ -35,14 +30,28 @@ export async function createProvider(name: ProviderName, options: ProviderFactor
             queryTimeout: options.timeout,
             executeTimeout: options.timeout ? options.timeout * 6 : undefined,
         });
+    });
+}
+
+export function registerProvider(name: string, factory: ProviderFactory): void {
+    ensureBuiltins();
+    registry.set(name, factory);
+}
+
+export async function createProvider(name: ProviderName, options: ProviderFactoryOptions = {}): Promise<LLMProvider> {
+    ensureBuiltins();
+    const factory = registry.get(name);
+    if (factory) {
+        return factory(options);
     }
 
     throw new Error(
-        `Unknown provider "${name}". Available: ${['claude-code', ...registry.keys()].join(', ')}. ` +
+        `Unknown provider "${name}". Available: ${[...registry.keys()].join(', ')}. ` +
         `Use registerProvider() to add custom providers.`
     );
 }
 
 export function listProviders(): string[] {
-    return ['claude-code', ...registry.keys()];
+    ensureBuiltins();
+    return [...registry.keys()];
 }
