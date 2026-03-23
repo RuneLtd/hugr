@@ -408,7 +408,7 @@ export class Manager {
                         console.error(`Error handling message: ${error instanceof Error ? error.message : String(error)}`);
                     }
 
-                    await this.joblog.markMessageProcessed(message.id);
+                    await this.joblog.markMessageProcessed(message.id, 'manager');
                 }
             }
         } finally {
