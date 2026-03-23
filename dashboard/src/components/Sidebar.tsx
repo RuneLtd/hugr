@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Box, Flex, Text, VStack } from '@chakra-ui/react';
+import { Box, Flex, Text, VStack, useColorModeValue, Image } from '@chakra-ui/react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -25,6 +25,7 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const logoFilter = useColorModeValue('none', 'invert(1)');
 
   useEffect(() => {
     NAV_ITEMS.forEach(({ href }) => {
@@ -46,10 +47,13 @@ export function Sidebar() {
       px={3}
     >
       <Flex px={2} mb={8} align="center" gap={2}>
-        <Box w="8px" h="8px" borderRadius="full" bg="green.400" />
-        <Text fontSize="md" fontWeight="600" color="text.primary">
-          hugr
-        </Text>
+        <Image
+          src="/hugr.svg"
+          alt="hugr"
+          h="22px"
+          w="auto"
+          filter={logoFilter}
+        />
         <Text fontSize="xs" color="text.subtle" fontWeight="400">
           dashboard
         </Text>
