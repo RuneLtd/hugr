@@ -136,14 +136,14 @@ preset: fast
     expect(config.preset).toBe('verified');
   });
 
-  it('throws on invalid configuration', async () => {
+  it('accepts any provider type (provider-agnostic)', async () => {
     const configYaml = `
 provider:
-  type: invalid-provider
+  type: custom-provider
 `;
     await writeFile(join(tempDir, 'config.yaml'), configYaml, 'utf-8');
-
-    await expect(loadConfig({ projectPath: tempDir })).rejects.toThrow();
+    const config = await loadConfig({ projectPath: tempDir });
+    expect(config.provider.type).toBe('custom-provider');
   });
 
   it('merges architect and raven config from file', async () => {
@@ -195,16 +195,9 @@ describe('CONFIG: validateConfig()', () => {
     expect(validation.errors).toContain('autonomy.level is required');
   });
 
-  it('rejects invalid provider type', () => {
-    const config = { ...DEFAULT_CONFIG, provider: { ...DEFAULT_CONFIG.provider, type: 'invalid-provider' as any } };
-    const validation = validateConfig(config);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors).toContain('Invalid provider: invalid-provider');
-  });
-
-  it('accepts all valid provider types', () => {
-    const validTypes = ['claude-code', 'anthropic', 'openai'];
-    validTypes.forEach(type => {
+  it('accepts any provider type (provider-agnostic)', () => {
+    const customTypes = ['claude-code', 'anthropic', 'openai', 'custom-llm', 'local-model'];
+    customTypes.forEach(type => {
       const config = { ...DEFAULT_CONFIG, provider: { ...DEFAULT_CONFIG.provider, type: type as any } };
       const validation = validateConfig(config);
       expect(validation.valid).toBe(true);
@@ -262,14 +255,13 @@ describe('CONFIG: validateConfig()', () => {
   it('detects multiple validation errors', () => {
     const config = {
       ...DEFAULT_CONFIG,
-      provider: { type: 'invalid' as any },
       autonomy: { level: 'invalid' as any },
       architect: { mode: 'invalid' as any },
       raven: { ...DEFAULT_CONFIG.raven, mode: 'invalid' as any },
     };
     const validation = validateConfig(config);
     expect(validation.valid).toBe(false);
-    expect(validation.errors.length).toBeGreaterThanOrEqual(4);
+    expect(validation.errors.length).toBeGreaterThanOrEqual(3);
   });
 });
 
