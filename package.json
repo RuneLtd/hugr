@@ -23,8 +23,7 @@
   },
   "files": [
     "dist",
-    "bin",
-    "dashboard"
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
