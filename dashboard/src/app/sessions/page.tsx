@@ -71,7 +71,8 @@ export default function SessionRunnerPage() {
 
   function startPolling(sessionId: string) {
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
+    const poll = async () => {
+      if (document.hidden) return;
       try {
         const res = await fetch(`/api/sessions/${sessionId}`);
         const data = await res.json();
@@ -80,8 +81,12 @@ export default function SessionRunnerPage() {
         if (data.session?.status === 'completed' || data.session?.status === 'failed') {
           if (pollRef.current) clearInterval(pollRef.current);
         }
-      } catch {}
-    }, 1000);
+      } catch (err) {
+        console.warn('Polling failed:', err);
+      }
+    };
+    poll();
+    pollRef.current = setInterval(poll, 2000);
   }
 
   async function startSession() {

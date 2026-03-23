@@ -172,7 +172,7 @@ export default function WorkflowsPage() {
                   const color = agentColors[step.agentId] ?? '#8a8a8a';
                   return (
                     <Flex
-                      key={i}
+                      key={`${step.agentId}-${i}-${editing.steps.length}`}
                       align="center"
                       gap={3}
                       p={3}

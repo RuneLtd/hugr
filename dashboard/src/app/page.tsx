@@ -35,12 +35,12 @@ export default function OverviewPage() {
     fetch('/api/stats')
       .then((r) => r.json())
       .then(setStats)
-      .catch(() => {});
+      .catch((err) => console.warn('Failed to fetch stats:', err));
 
     fetch('/api/sessions?limit=5')
       .then((r) => r.json())
       .then((data) => setRecent(data.sessions ?? []))
-      .catch(() => {});
+      .catch((err) => console.warn('Failed to fetch sessions:', err));
   }, []);
 
   return (

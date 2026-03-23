@@ -107,7 +107,7 @@ export default function HistoryPage() {
                         <VStack spacing={2} align="stretch">
                           {session.stepResults.map((result, i) => (
                             <Box
-                              key={i}
+                              key={`${result.agentName}-${i}`}
                               p={3}
                               bg="bg.tertiary"
                               borderRadius="lg"
