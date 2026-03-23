@@ -1,5 +1,6 @@
 import { Agent, type AgentConfig } from '../Agent.js';
 import type { AgentMessage } from '../../types/joblog.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export type AggregationStrategy = 'collect' | 'merge' | 'summarize' | 'vote';
 
@@ -10,6 +11,7 @@ export interface AggregatorConfig extends Omit<AgentConfig, 'id' | 'name'> {
     strategy?: AggregationStrategy;
     systemPrompt?: string;
     onPartialResult?: (result: unknown, index: number, total: number) => void;
+    toolResolver?: ToolResolver;
 }
 
 export class Aggregator extends Agent {
@@ -36,6 +38,10 @@ export class Aggregator extends Agent {
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
+        if (!message.jobId) {
+            throw new Error('Aggregator received message without jobId');
+        }
+
         if (message.type === 'task_result') {
             this.collectedResults.push({
                 from: message.from,
@@ -52,7 +58,7 @@ export class Aggregator extends Agent {
 
             if (this.collectedResults.length >= this.expectedResults) {
                 const aggregated = await this.aggregate();
-                await this.sendResult(message.jobId!, {
+                await this.sendResult(message.jobId, {
                     success: true,
                     aggregated,
                     sourceCount: this.collectedResults.length,
@@ -65,7 +71,7 @@ export class Aggregator extends Agent {
         await this.send({
             type: 'task_result',
             to: message.from,
-            jobId: message.jobId!,
+            jobId: message.jobId,
             payload: { error: 'Aggregator only accepts task_result messages' },
         });
     }

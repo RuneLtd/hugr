@@ -1,6 +1,7 @@
 import { Agent, type AgentConfig } from '../Agent.js';
 import type { AgentMessage } from '../../types/joblog.js';
 import type { AgentRunResult } from '../../runtime/types.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface ExecutorConfig extends Omit<AgentConfig, 'id' | 'name'> {
     id?: string;
@@ -9,6 +10,7 @@ export interface ExecutorConfig extends Omit<AgentConfig, 'id' | 'name'> {
     allowedTools?: string[];
     maxTurns?: number;
     onProgress?: (activity: { type: string; message: string }) => void;
+    toolResolver?: ToolResolver;
 }
 
 export class Executor extends Agent {
@@ -30,6 +32,10 @@ export class Executor extends Agent {
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
+        if (!message.jobId) {
+            throw new Error('Executor received message without jobId');
+        }
+
         const payload = message.payload as {
             task: string;
             context?: string;
@@ -52,7 +58,7 @@ export class Executor extends Agent {
             } : undefined,
         });
 
-        await this.sendResult(message.jobId!, {
+        await this.sendResult(message.jobId, {
             success: result.success,
             output: result.transcript,
             filesChanged: result.filesChanged ?? [],

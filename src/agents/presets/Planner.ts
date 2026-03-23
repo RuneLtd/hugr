@@ -1,5 +1,6 @@
 import { Agent, type AgentConfig } from '../Agent.js';
 import type { AgentMessage } from '../../types/joblog.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface PlanStep {
     id: string;
@@ -21,6 +22,7 @@ export interface PlannerConfig extends Omit<AgentConfig, 'id' | 'name'> {
     maxSteps?: number;
     outputFormat?: 'json' | 'markdown';
     onPlanGenerated?: (plan: PlanResult) => void;
+    toolResolver?: ToolResolver;
 }
 
 export class Planner extends Agent {
@@ -42,6 +44,10 @@ export class Planner extends Agent {
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
+        if (!message.jobId) {
+            throw new Error('Planner received message without jobId');
+        }
+
         const payload = message.payload as {
             task: string;
             context?: string;
@@ -53,7 +59,7 @@ export class Planner extends Agent {
         const result = await this.runtime.runAgent({
             workdir: payload.projectPath ?? this.projectPath ?? process.cwd(),
             task: prompt,
-            allowedTools: ['Read', 'Glob', 'Grep'],
+            allowedTools: this.resolveTools('read-only', ['Read', 'Glob', 'Grep']),
         });
 
         let plan: PlanResult;
@@ -77,7 +83,7 @@ export class Planner extends Agent {
             this.onPlanGenerated(plan);
         }
 
-        await this.sendResult(message.jobId!, {
+        await this.sendResult(message.jobId, {
             success: result.success,
             plan,
         });

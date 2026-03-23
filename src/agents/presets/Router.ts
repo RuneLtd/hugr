@@ -1,5 +1,6 @@
 import { Agent, type AgentConfig } from '../Agent.js';
 import type { AgentMessage } from '../../types/joblog.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface Route {
     agentId: string;
@@ -14,6 +15,7 @@ export interface RouterConfig extends Omit<AgentConfig, 'id' | 'name'> {
     defaultRoute?: string;
     useRuntime?: boolean;
     routeFn?: (message: AgentMessage, routes: Route[]) => Promise<string | string[]>;
+    toolResolver?: ToolResolver;
 }
 
 export class Router extends Agent {
@@ -35,6 +37,10 @@ export class Router extends Agent {
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
+        if (!message.jobId) {
+            throw new Error('Router received message without jobId');
+        }
+
         let targetAgents: string[];
 
         if (this.routeFn) {
@@ -50,7 +56,7 @@ export class Router extends Agent {
             await this.send({
                 type: 'task_assignment',
                 to: agentId,
-                jobId: message.jobId!,
+                jobId: message.jobId,
                 payload: message.payload,
             });
         }

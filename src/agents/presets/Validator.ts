@@ -1,5 +1,6 @@
 import { Agent, type AgentConfig } from '../Agent.js';
 import type { AgentMessage } from '../../types/joblog.js';
+import type { ToolResolver } from '../../tools/types.js';
 
 export interface ValidationRule {
     id: string;
@@ -26,6 +27,7 @@ export interface ValidatorConfig extends Omit<AgentConfig, 'id' | 'name'> {
     passThreshold?: number;
     generateFixPrompt?: boolean;
     systemPrompt?: string;
+    toolResolver?: ToolResolver;
 }
 
 export class Validator extends Agent {
@@ -47,6 +49,10 @@ export class Validator extends Agent {
     }
 
     protected async handleMessage(message: AgentMessage): Promise<void> {
+        if (!message.jobId) {
+            throw new Error('Validator received message without jobId');
+        }
+
         const payload = message.payload as {
             task?: string;
             projectPath?: string;
@@ -59,7 +65,7 @@ export class Validator extends Agent {
         const result = await this.runtime.runAgent({
             workdir: payload.projectPath ?? this.projectPath ?? process.cwd(),
             task: prompt,
-            allowedTools: ['Read', 'Glob', 'Grep'],
+            allowedTools: this.resolveTools('read-only', ['Read', 'Glob', 'Grep']),
         });
 
         let validation: ValidationResult;
@@ -77,7 +83,7 @@ export class Validator extends Agent {
             };
         }
 
-        await this.sendResult(message.jobId!, {
+        await this.sendResult(message.jobId, {
             success: true,
             validation,
         });
