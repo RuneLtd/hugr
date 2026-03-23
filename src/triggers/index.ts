@@ -19,4 +19,5 @@ export { CronTrigger, parseCron, matchesCron, nextCronMatch, describeCron } from
 export { WebhookServer, WebhookTrigger } from './webhook.js';
 export { PollTrigger } from './poll.js';
 export { WatchTrigger } from './watch.js';
-export { getTemplate, listTemplates, listTemplatesByCategory, getCategories, createTriggerFromTemplate } from './templates.js';
+export { getTemplate, listTemplates, listTemplatesByCategory, getCategories, createTriggerFromTemplate, pipelineFromTemplate } from './templates.js';
+export { TriggerRunner, type TriggerRunnerConfig, type TriggerSession } from './runner.js';
