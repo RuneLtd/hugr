@@ -1,5 +1,9 @@
 <div align="center">
 
+⚠️ <strong>Early Development</strong> — Hugr is under active development. Many features are untested or partially implemented. Expect breaking changes. Proceed with caution.
+
+<br/>
+
 <img src="assets/hugr.png" alt="Hugr" width="200" />
 
 # Hugr
@@ -17,13 +21,9 @@ Define agent pipelines for any task. Wire in any LLM provider. Chain autonomous 
 ![version](https://img.shields.io/badge/version-0.1.0-green)
 ![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 
-> **⚠️ Early Development** — Hugr is under active development. Many features are untested or partially implemented. Expect breaking changes. Proceed with caution.
-
 ---
 
-> **v0.1.0 — March 2026**
->
-> Hugr is functional but still pre-1.0. Expect rough edges and breaking changes between minor versions. Pin to a specific version for production use until v1.0. [Report issues here.](https://github.com/RuneLtd/hugr/issues)
+**v0.1.0 — March 2026** · Hugr is functional but still pre-1.0. Expect rough edges and breaking changes between minor versions. Pin to a specific version for production use until v1.0. [Report issues here.](https://github.com/RuneLtd/hugr/issues)
 
 ---
 
