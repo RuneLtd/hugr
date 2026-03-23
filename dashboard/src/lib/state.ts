@@ -90,11 +90,15 @@ export interface CustomAgentRecord {
 
 export interface TriggerRecord {
   id: string;
+  name: string;
   type: string;
   enabled: boolean;
   task: string;
   pipeline?: string;
+  workflowId?: string;
+  workflowSteps?: PipelineStep[];
   projectPath?: string;
+  autonomy?: string;
   maxConcurrent?: number;
   cooldown?: number;
   cron?: string;
