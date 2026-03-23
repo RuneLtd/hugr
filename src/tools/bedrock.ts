@@ -9,7 +9,7 @@ export function createBedrockToolRegistry(): ToolRegistry {
 
     registry.registerAccessLevel('full', ['computer_20241022', 'bash_20241022', 'text_editor_20241022']);
     registry.registerAccessLevel('read-only', ['text_editor_20241022']);
-    registry.registerAccessLevel('read-write-no-bash', ['text_editor_20241022']);
+    registry.registerAccessLevel('read-write-no-bash', ['computer_20241022', 'text_editor_20241022']);
 
     registry.registerNameMapping('computer', 'computer_20241022');
     registry.registerNameMapping('execute', 'bash_20241022');

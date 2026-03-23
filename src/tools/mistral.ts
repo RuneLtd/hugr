@@ -15,6 +15,8 @@ export function createMistralToolRegistry(): ToolRegistry {
     registry.registerNameMapping('search', 'web_search');
     registry.registerNameMapping('execute', 'code_interpreter');
     registry.registerNameMapping('read', 'document_library');
+    registry.registerNameMapping('write', 'code_interpreter');
+    registry.registerNameMapping('web', 'web_search');
 
     return registry;
 }

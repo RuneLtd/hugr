@@ -15,6 +15,7 @@ export function createGroqToolRegistry(): ToolRegistry {
     registry.registerAccessLevel('execute', ['code_interpreter', 'wolfram_alpha']);
 
     registry.registerNameMapping('search', 'web_search');
+    registry.registerNameMapping('read', 'visit_website');
     registry.registerNameMapping('execute', 'code_interpreter');
     registry.registerNameMapping('web', 'visit_website');
     registry.registerNameMapping('computer', 'browser_automation');

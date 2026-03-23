@@ -13,7 +13,9 @@ export function createXAIToolRegistry(): ToolRegistry {
     registry.registerAccessLevel('execute', ['code_execution']);
 
     registry.registerNameMapping('search', 'web_search');
+    registry.registerNameMapping('read', 'web_search');
     registry.registerNameMapping('execute', 'code_execution');
+    registry.registerNameMapping('web', 'web_search');
 
     return registry;
 }

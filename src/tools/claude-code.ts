@@ -11,13 +11,13 @@ export function createClaudeCodeToolRegistry(): ToolRegistry {
     registry.registerTool({ name: 'Grep', capabilities: { search: true } });
     registry.registerTool({ name: 'WebSearch', capabilities: { web: true } });
     registry.registerTool({ name: 'WebFetch', capabilities: { web: true } });
-    registry.registerTool({ name: 'TodoWrite', capabilities: {} });
-    registry.registerTool({ name: 'Task', capabilities: {} });
-    registry.registerTool({ name: 'AskUserQuestion', capabilities: {} });
+    registry.registerTool({ name: 'TodoWrite', capabilities: { write: true } });
+    registry.registerTool({ name: 'Task', capabilities: { execute: true } });
+    registry.registerTool({ name: 'AskUserQuestion', capabilities: { read: true } });
 
-    registry.registerAccessLevel('full', ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']);
-    registry.registerAccessLevel('read-only', ['Read', 'Glob', 'Grep']);
-    registry.registerAccessLevel('read-write-no-bash', ['Read', 'Write', 'Edit', 'Glob', 'Grep']);
+    registry.registerAccessLevel('full', ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite', 'Task', 'AskUserQuestion']);
+    registry.registerAccessLevel('read-only', ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch']);
+    registry.registerAccessLevel('read-write-no-bash', ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite', 'AskUserQuestion']);
 
     return registry;
 }
