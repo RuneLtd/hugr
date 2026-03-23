@@ -10,10 +10,15 @@ import { Plus, Trash2, GripVertical, Save, Copy } from 'lucide-react';
 import { agentColors } from '@/lib/colors';
 import { WORKFLOW_TEMPLATES } from '@/lib/templates';
 
-const AVAILABLE_WORKERS = [
+const BUILT_IN_WORKERS = [
   'architect', 'coder', 'raven', 'reviewer',
   'planner', 'executor', 'validator', 'router', 'aggregator',
 ];
+
+interface CustomWorker {
+  id: string;
+  name: string;
+}
 
 interface WorkflowStep {
   agentId: string;
@@ -35,9 +40,13 @@ interface Workflow {
 export default function WorkflowsPage() {
   const toast = useToast();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [customWorkers, setCustomWorkers] = useState<CustomWorker[]>([]);
   const [editing, setEditing] = useState<Workflow | null>(null);
   const dragIdx = useRef<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  const agentNames: Record<string, string> = {};
+  customWorkers.forEach((w) => { agentNames[w.id] = w.name; });
 
   function reorderSteps(from: number, to: number) {
     if (!editing || from === to) return;
@@ -51,6 +60,10 @@ export default function WorkflowsPage() {
     fetch('/api/workflows')
       .then((r) => r.json())
       .then((data) => setWorkflows(data.workflows ?? []))
+      .catch(() => {});
+    fetch('/api/workers')
+      .then((r) => r.json())
+      .then((data) => setCustomWorkers((data.workers ?? []).map((w: any) => ({ id: w.id, name: w.name }))))
       .catch(() => {});
   }, []);
 
@@ -112,6 +125,10 @@ export default function WorkflowsPage() {
     }
   }
 
+  function getStepLabel(agentId: string): string {
+    return agentNames[agentId] ?? agentId;
+  }
+
   return (
     <Shell>
       <PageHeader
@@ -154,7 +171,7 @@ export default function WorkflowsPage() {
               <Text fontSize="xs" color="text.muted" mb={3}>
                 Preview
               </Text>
-              <WorkflowVisual steps={editing.steps} />
+              <WorkflowVisual steps={editing.steps} agentNames={agentNames} />
             </Box>
 
             <Box>
@@ -200,17 +217,28 @@ export default function WorkflowsPage() {
                       <Box w="6px" h="6px" borderRadius="full" bg={color} />
                       <Select
                         size="xs"
-                        w="160px"
+                        w="180px"
                         value={step.agentId}
                         onChange={(e) => updateStep(i, { agentId: e.target.value })}
                         bg="bg.secondary"
                         borderColor="border.subtle"
                       >
-                        {AVAILABLE_WORKERS.map((a) => (
-                          <option key={a} value={a}>
-                            {a}
-                          </option>
-                        ))}
+                        <optgroup label="Built-in">
+                          {BUILT_IN_WORKERS.map((a) => (
+                            <option key={a} value={a}>
+                              {a}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customWorkers.length > 0 && (
+                          <optgroup label="Custom Workers">
+                            {customWorkers.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </Select>
 
                       <HStack spacing={2}>
@@ -279,84 +307,89 @@ export default function WorkflowsPage() {
         </Card>
       ) : (
         <>
-          {workflows.length === 0 ? (
-            <Box>
-              <Text fontSize="sm" fontWeight="600" color="text.secondary" mb={1}>
-                Templates
+          {workflows.length > 0 && (
+            <Box mb={6}>
+              <Text fontSize="sm" fontWeight="600" color="text.secondary" mb={3}>
+                Your Workflows
               </Text>
-              <Text fontSize="xs" color="text.subtle" mb={4}>
-                Start from a template or create a blank workflow
-              </Text>
-              {Array.from(new Set(WORKFLOW_TEMPLATES.map((t) => t.category))).map((category) => (
-                <Box key={category} mb={5}>
-                  <Text fontSize="2xs" fontWeight="600" color="text.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
-                    {category}
-                  </Text>
-                  <VStack spacing={2} align="stretch">
-                    {WORKFLOW_TEMPLATES.filter((t) => t.category === category).map((tpl) => (
-                      <Card
-                        key={tpl.id}
-                        py={3}
-                        px={4}
-                        cursor="pointer"
-                        _hover={{ borderColor: 'border.default' }}
-                        onClick={() => setEditing({
-                          id: `workflow-${Date.now()}`,
-                          name: tpl.name,
-                          description: tpl.description,
-                          steps: tpl.steps.map((s) => ({ ...s })),
-                        })}
-                      >
-                        <Flex justify="space-between" align="center">
-                          <Flex align="center" gap={3} flex={1} minW={0}>
-                            <Box color="text.subtle">
-                              <Copy size={14} />
-                            </Box>
-                            <Box flex={1} minW={0}>
-                              <Text fontSize="sm" fontWeight="500" color="text.primary">
-                                {tpl.name}
-                              </Text>
-                              <Text fontSize="xs" color="text.muted" mt={0.5} noOfLines={1}>
-                                {tpl.description}
-                              </Text>
-                            </Box>
-                          </Flex>
-                          <WorkflowVisual steps={tpl.steps} />
-                        </Flex>
-                      </Card>
-                    ))}
-                  </VStack>
-                </Box>
-              ))}
-            </Box>
-          ) : (
-            <VStack spacing={2} align="stretch">
-              {workflows.map((workflow) => (
-                <Card
-                  key={workflow.id}
-                  py={3}
-                  px={4}
-                  cursor="pointer"
-                  _hover={{ borderColor: 'border.default' }}
-                  onClick={() => setEditing(workflow)}
-                >
-                  <Flex justify="space-between" align="center">
-                    <Box>
-                      <Text fontSize="sm" fontWeight="500" color="text.primary">
-                        {workflow.name}
-                      </Text>
-                      {workflow.description && (
-                        <Text fontSize="xs" color="text.muted" mt={0.5}>
-                          {workflow.description}
+              <VStack spacing={2} align="stretch">
+                {workflows.map((workflow) => (
+                  <Card
+                    key={workflow.id}
+                    py={3}
+                    px={4}
+                    cursor="pointer"
+                    _hover={{ borderColor: 'border.default' }}
+                    onClick={() => setEditing(workflow)}
+                  >
+                    <Flex justify="space-between" align="center">
+                      <Box>
+                        <Text fontSize="sm" fontWeight="500" color="text.primary">
+                          {workflow.name}
                         </Text>
-                      )}
-                    </Box>
-                    <WorkflowVisual steps={workflow.steps} />
-                  </Flex>
-                </Card>
-              ))}
-            </VStack>
+                        {workflow.description && (
+                          <Text fontSize="xs" color="text.muted" mt={0.5}>
+                            {workflow.description}
+                          </Text>
+                        )}
+                      </Box>
+                      <WorkflowVisual steps={workflow.steps} agentNames={agentNames} />
+                    </Flex>
+                  </Card>
+                ))}
+              </VStack>
+            </Box>
           )}
+
+          <Box>
+            <Text fontSize="sm" fontWeight="600" color="text.secondary" mb={1}>
+              Templates
+            </Text>
+            <Text fontSize="xs" color="text.subtle" mb={4}>
+              Start from a template or create a blank workflow
+            </Text>
+            {Array.from(new Set(WORKFLOW_TEMPLATES.map((t) => t.category))).map((category) => (
+              <Box key={category} mb={5}>
+                <Text fontSize="2xs" fontWeight="600" color="text.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
+                  {category}
+                </Text>
+                <VStack spacing={2} align="stretch">
+                  {WORKFLOW_TEMPLATES.filter((t) => t.category === category).map((tpl) => (
+                    <Card
+                      key={tpl.id}
+                      py={3}
+                      px={4}
+                      cursor="pointer"
+                      _hover={{ borderColor: 'border.default' }}
+                      onClick={() => setEditing({
+                        id: `workflow-${Date.now()}`,
+                        name: tpl.name,
+                        description: tpl.description,
+                        steps: tpl.steps.map((s) => ({ ...s })),
+                      })}
+                    >
+                      <Flex justify="space-between" align="center">
+                        <Flex align="center" gap={3} flex={1} minW={0}>
+                          <Box color="text.subtle">
+                            <Copy size={14} />
+                          </Box>
+                          <Box flex={1} minW={0}>
+                            <Text fontSize="sm" fontWeight="500" color="text.primary">
+                              {tpl.name}
+                            </Text>
+                            <Text fontSize="xs" color="text.muted" mt={0.5} noOfLines={1}>
+                              {tpl.description}
+                            </Text>
+                          </Box>
+                        </Flex>
+                        <WorkflowVisual steps={tpl.steps} agentNames={agentNames} />
+                      </Flex>
+                    </Card>
+                  ))}
+                </VStack>
+              </Box>
+            ))}
+          </Box>
         </>
       )}
     </Shell>

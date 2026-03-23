@@ -155,6 +155,7 @@ export function ActivityFeed({
   items,
   answeredIds,
   onRespond,
+  agentNames,
 }: {
   items: ActivityItem[];
   answeredIds?: Set<string>;
@@ -162,6 +163,7 @@ export function ActivityFeed({
     activityId: string,
     answers: Array<{ question: string; answer: string; skipped: boolean }>
   ) => void;
+  agentNames?: Record<string, string>;
 }) {
   if (items.length === 0) {
     return (
@@ -205,7 +207,7 @@ export function ActivityFeed({
                       {isClarification ? 'question' : item.type}
                     </Text>
                     <Text fontSize="2xs" color="text.subtle">
-                      {item.agentId}
+                      {agentNames?.[item.agentId] ?? item.agentId}
                     </Text>
                   </Flex>
                   <Text fontSize="2xs" color="text.subtle" fontFamily="mono">

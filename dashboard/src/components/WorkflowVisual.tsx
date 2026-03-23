@@ -11,13 +11,19 @@ interface WorkflowStep {
   iterations?: number;
 }
 
-export function WorkflowVisual({ steps }: { steps: WorkflowStep[] }) {
+interface WorkflowVisualProps {
+  steps: WorkflowStep[];
+  agentNames?: Record<string, string>;
+}
+
+export function WorkflowVisual({ steps, agentNames }: WorkflowVisualProps) {
   const enabledSteps = steps.filter((s) => s.enabled !== false);
 
   return (
     <Flex align="center" gap={0} flexWrap="wrap">
       {enabledSteps.map((step, i) => {
         const color = agentColors[step.agentId] ?? agentColors.coder;
+        const displayName = agentNames?.[step.agentId] ?? step.agentId;
 
         return (
           <Flex key={step.agentId + i} align="center" gap={0}>
@@ -33,7 +39,7 @@ export function WorkflowVisual({ steps }: { steps: WorkflowStep[] }) {
             >
               <Box w="6px" h="6px" borderRadius="full" bg={color} />
               <Text fontSize="xs" fontWeight="500" color="text.secondary">
-                {step.agentId}
+                {displayName}
               </Text>
               {step.iterations && step.iterations > 1 && (
                 <Text fontSize="2xs" color="text.subtle">
