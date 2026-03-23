@@ -34,6 +34,7 @@ export default function SessionRunnerPage() {
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const [pickingFolder, setPickingFolder] = useState(false);
+  const [agentNames, setAgentNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/workflows')
@@ -53,6 +54,17 @@ export default function SessionRunnerPage() {
         setWorkflows(list);
         if (list.length > 0) setSelectedWorkflow(list[0].id);
       });
+
+    fetch('/api/workers')
+      .then((r) => r.json())
+      .then((data) => {
+        const names: Record<string, string> = {};
+        (data.workers ?? []).forEach((w: { id: string; name: string }) => {
+          names[w.id] = w.name;
+        });
+        setAgentNames(names);
+      })
+      .catch(() => {});
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -170,7 +182,7 @@ export default function SessionRunnerPage() {
                 </Select>
                 {workflow && (
                   <Box mt={3}>
-                    <WorkflowVisual steps={workflow.steps} />
+                    <WorkflowVisual steps={workflow.steps} agentNames={agentNames} />
                   </Box>
                 )}
               </Box>
@@ -251,7 +263,7 @@ export default function SessionRunnerPage() {
               )}
             </Flex>
 
-            <ActivityFeed items={activities} answeredIds={answeredIds} onRespond={handleRespond} />
+            <ActivityFeed items={activities} answeredIds={answeredIds} onRespond={handleRespond} agentNames={agentNames} />
           </Card>
       </VStack>
     </Shell>

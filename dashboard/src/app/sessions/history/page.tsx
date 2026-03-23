@@ -23,11 +23,22 @@ interface SessionRecord {
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [agentNames, setAgentNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/sessions?limit=50')
       .then((r) => r.json())
       .then((data) => setSessions(data.sessions ?? []))
+      .catch(() => {});
+    fetch('/api/workers')
+      .then((r) => r.json())
+      .then((data) => {
+        const names: Record<string, string> = {};
+        (data.workers ?? []).forEach((w: { id: string; name: string }) => {
+          names[w.id] = w.name;
+        });
+        setAgentNames(names);
+      })
       .catch(() => {});
   }, []);
 
@@ -96,7 +107,7 @@ export default function HistoryPage() {
                       <Text fontSize="xs" color="text.muted" mb={2}>
                         Workflow
                       </Text>
-                      <WorkflowVisual steps={session.pipeline.steps} />
+                      <WorkflowVisual steps={session.pipeline.steps} agentNames={agentNames} />
                     </Box>
 
                     {session.stepResults && session.stepResults.length > 0 && (

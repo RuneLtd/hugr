@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDashboardState, saveDashboardState } from '@/lib/state';
 import { getActiveSession, setActiveSession, clearActiveSession } from '@/lib/activeSession';
 import { WORKFLOW_TEMPLATES } from '@/lib/templates';
+import { loadHugr } from '@/lib/hugrLoader';
 
 export async function GET(req: NextRequest) {
   const limit = parseInt(req.nextUrl.searchParams.get('limit') ?? '20');
@@ -29,14 +30,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'A session is already running' }, { status: 409 });
   }
 
-  let hugr: Record<string, unknown>;
-  try {
-    hugr = await import('@runeltd/hugr');
-  } catch {
-    return NextResponse.json({ error: 'hugr is not installed. Run: npm link @runeltd/hugr' }, { status: 500 });
+  const hugr = await loadHugr();
+  if (!hugr || !hugr.Manager) {
+    return NextResponse.json({ error: 'hugr is not installed or not built. Run: pnpm run build from hugr root' }, { status: 500 });
   }
 
-  const { ClaudeCodeRuntime, Manager, Joblog, Architect, Coder, Raven, Reviewer, CustomAgent } = hugr as Record<string, any>;
+  const { ClaudeCodeRuntime, Manager, Joblog, Architect, Coder, Raven, Reviewer, CustomAgent } = hugr;
 
   let cliPath = 'claude';
   try {
@@ -68,13 +67,28 @@ export async function POST(req: NextRequest) {
   const pipelineConfig = {
     id: pipeline.id,
     name: pipeline.name,
-    steps: pipeline.steps.map((s) => ({
-      agentId: s.agentId,
-      enabled: s.enabled,
-      mode: s.mode,
-      iterations: s.iterations,
-      loopUntilDone: s.loopUntilDone,
-    })),
+    steps: pipeline.steps.map((s) => {
+      const base: Record<string, unknown> = {
+        agentId: s.agentId,
+        enabled: s.enabled,
+        mode: s.mode,
+        iterations: s.iterations,
+        loopUntilDone: s.loopUntilDone,
+      };
+      if (!['architect', 'coder', 'raven', 'reviewer'].includes(s.agentId)) {
+        const worker = state.customAgents.find((a) => a.id === s.agentId);
+        if (worker) {
+          base.agentConfig = {
+            name: worker.name,
+            instructions: (worker as any).systemPrompt || '',
+            toolAccess: 'full' as const,
+            allowedTools: (worker as any).tools,
+            selfReview: (worker as any).selfReview,
+          };
+        }
+      }
+      return base;
+    }),
   };
 
   const manager = new Manager({
@@ -147,6 +161,7 @@ export async function POST(req: NextRequest) {
         pollInterval,
         projectPath,
         onActivity,
+        isPipelineAgent: true,
       }));
     }
   }
