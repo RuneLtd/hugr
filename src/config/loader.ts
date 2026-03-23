@@ -106,6 +106,13 @@ function mergeProjectConfig(config: HugrConfig, fileConfig: PartialHugrConfig): 
   if (fileConfig.raven) {
     Object.assign(config.raven, fileConfig.raven);
   }
+  if (fileConfig.triggers) {
+    config.triggers = {
+      ...config.triggers,
+      ...fileConfig.triggers,
+      triggers: fileConfig.triggers.triggers ?? config.triggers?.triggers ?? [],
+    };
+  }
 }
 
 export function getDefaultConfig(presetName?: string): HugrConfig {
