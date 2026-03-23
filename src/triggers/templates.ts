@@ -1,5 +1,6 @@
 
 import type { TriggerTemplate, TriggerConfig } from './types.js';
+import type { PipelineConfig, PipelineStep } from '../config/schema.js';
 
 const templates: TriggerTemplate[] = [
 
@@ -527,9 +528,37 @@ export function createTriggerFromTemplate(
     if (!template) return undefined;
 
     const { id, ...rest } = overrides;
-    return {
+    const config = {
         ...template.trigger,
         ...rest,
         id,
     } as TriggerConfig;
+
+    if (template.pipeline) {
+        config.metadata = {
+            ...config.metadata,
+            pipeline: {
+                name: template.pipeline.name,
+                description: template.pipeline.description,
+                steps: template.pipeline.steps,
+            },
+        };
+    }
+
+    return config;
+}
+
+export function pipelineFromTemplate(templateId: string): PipelineConfig | undefined {
+    const template = templateMap.get(templateId);
+    if (!template?.pipeline) return undefined;
+
+    return {
+        id: `template-${templateId}`,
+        name: template.pipeline.name,
+        description: template.pipeline.description,
+        steps: template.pipeline.steps.map(step => ({
+            ...step,
+            enabled: step.enabled !== false,
+        })) as PipelineStep[],
+    };
 }

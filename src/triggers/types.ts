@@ -78,6 +78,7 @@ export interface TriggerHandler {
 export type TriggerCallback = (event: TriggerEvent) => Promise<void>;
 
 export interface TriggerEngineConfig {
+    enabled?: boolean;
     triggers: TriggerConfig[];
     onTrigger: TriggerCallback;
     webhookPort?: number;

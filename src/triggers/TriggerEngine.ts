@@ -11,6 +11,7 @@ import { CronTrigger } from './cron.js';
 import { WebhookServer, WebhookTrigger } from './webhook.js';
 import { PollTrigger } from './poll.js';
 import { WatchTrigger } from './watch.js';
+import { resolvePath } from './utils.js';
 
 export class TriggerEngine {
     private handlers = new Map<string, TriggerHandler>();
@@ -26,6 +27,12 @@ export class TriggerEngine {
 
     async start(): Promise<void> {
         if (this.running) return;
+
+        if (this.config.enabled === false) {
+            this.log('  Triggers globally disabled');
+            return;
+        }
+
         this.running = true;
 
         const triggers = this.config.triggers.filter(t => t.enabled !== false);
@@ -148,7 +155,17 @@ export class TriggerEngine {
 
             case 'webhook': {
                 const wh = new WebhookTrigger(triggerConfig, wrappedCallback, this.log);
-                if (this.webhookServer) {
+                if (!this.webhookServer) {
+                    this.webhookServer = new WebhookServer(
+                        this.config.webhookPort ?? 9090,
+                        this.config.webhookHost ?? '0.0.0.0',
+                        this.log,
+                    );
+                    this.webhookServer.registerRoute(wh);
+                    if (this.running) {
+                        await this.webhookServer.start();
+                    }
+                } else {
                     this.webhookServer.registerRoute(wh);
                 }
                 handler = wh;
@@ -219,20 +236,3 @@ export function interpolateTemplate(template: string, context: Record<string, un
     });
 }
 
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-    const parts = path.split('.');
-    let current: unknown = obj;
-    for (const part of parts) {
-        if (current == null || typeof current !== 'object') return undefined;
-        if (Array.isArray(current)) {
-            const idx = parseInt(part, 10);
-            if (!isNaN(idx)) {
-                current = current[idx];
-                continue;
-            }
-            return undefined;
-        }
-        current = (current as Record<string, unknown>)[part];
-    }
-    return current;
-}

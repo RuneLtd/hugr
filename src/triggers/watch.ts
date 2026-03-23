@@ -1,7 +1,7 @@
 
 import { watch, type FSWatcher } from 'node:fs';
-import { stat, readdir } from 'node:fs/promises';
-import { join, relative, basename } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { TriggerConfig, TriggerState, TriggerHandler, TriggerCallback, TriggerEvent } from './types.js';
 
 export class WatchTrigger implements TriggerHandler {
@@ -84,7 +84,19 @@ export class WatchTrigger implements TriggerHandler {
 
         if (filename.startsWith('.git/') || filename.includes('node_modules/')) return;
 
-        const changeType = eventType === 'rename' ? 'create' : 'modify';
+        if (eventType === 'rename') {
+            const fullPath = join(this.config.watch!.path, filename);
+            stat(fullPath).then(() => {
+                this.queueChange(filename, 'create');
+            }).catch(() => {
+                this.queueChange(filename, 'delete');
+            });
+        } else {
+            this.queueChange(filename, 'modify');
+        }
+    }
+
+    private queueChange(filename: string, changeType: string): void {
         if (!this.watchEvents.has(changeType)) return;
 
         this.pendingChanges.set(filename, changeType);

@@ -2,6 +2,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { TriggerConfig, TriggerState, TriggerHandler, TriggerCallback, TriggerEvent } from './types.js';
+import { resolvePath } from './utils.js';
 
 function readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -273,14 +274,4 @@ export class WebhookTrigger implements TriggerHandler {
             }
         }
     }
-}
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-    const parts = path.split('.');
-    let current: unknown = obj;
-    for (const part of parts) {
-        if (current == null || typeof current !== 'object') return undefined;
-        current = (current as Record<string, unknown>)[part];
-    }
-    return current;
 }

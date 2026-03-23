@@ -125,38 +125,33 @@ export class PollTrigger implements TriggerHandler {
                 return;
             }
 
-            for (const item of items) {
-                const event: TriggerEvent = {
-                    triggerId: this.config.id,
-                    triggerType: 'poll',
-                    timestamp: new Date(),
-                    payload: {
-                        item: item as Record<string, unknown>,
-                        itemCount: items.length,
-                        sourceUrl: pollConfig.url,
-                    },
-                    source: pollConfig.url,
-                };
+            const event: TriggerEvent = {
+                triggerId: this.config.id,
+                triggerType: 'poll',
+                timestamp: new Date(),
+                payload: {
+                    items: items as Record<string, unknown>[],
+                    itemCount: items.length,
+                    sourceUrl: pollConfig.url,
+                    item: items[0] as Record<string, unknown>,
+                },
+                source: pollConfig.url,
+            };
 
-                this.state.status = 'firing';
-                this.state.lastFired = new Date();
-                this.state.fireCount++;
-                this.state.activeSessions++;
+            this.state.status = 'firing';
+            this.state.lastFired = new Date();
+            this.state.fireCount++;
+            this.state.activeSessions++;
 
-                try {
-                    await this.callback(event);
-                } catch (err) {
-                    this.state.lastError = err instanceof Error ? err.message : String(err);
-                    this.log(`  Poll trigger "${this.config.id}" error: ${this.state.lastError}`);
-                } finally {
-                    this.state.activeSessions = Math.max(0, this.state.activeSessions - 1);
-                    if (this.state.status === 'firing') {
-                        this.state.status = 'active';
-                    }
-                }
-
-                if (this.config.maxConcurrent && this.state.activeSessions >= this.config.maxConcurrent) {
-                    break;
+            try {
+                await this.callback(event);
+            } catch (err) {
+                this.state.lastError = err instanceof Error ? err.message : String(err);
+                this.log(`  Poll trigger "${this.config.id}" error: ${this.state.lastError}`);
+            } finally {
+                this.state.activeSessions = Math.max(0, this.state.activeSessions - 1);
+                if (this.state.status === 'firing') {
+                    this.state.status = 'active';
                 }
             }
         } catch (err) {
