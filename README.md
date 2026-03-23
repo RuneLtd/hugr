@@ -17,6 +17,8 @@ Define agent pipelines for any task. Wire in any LLM provider. Chain autonomous 
 ![version](https://img.shields.io/badge/version-0.1.0-green)
 ![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 
+> **⚠️ Early Development** — Hugr is under active development. Many features are untested or partially implemented. Expect breaking changes. Proceed with caution.
+
 ---
 
 > **v0.1.0 — March 2026**
