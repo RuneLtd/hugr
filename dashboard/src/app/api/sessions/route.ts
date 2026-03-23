@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   let hugr: Record<string, unknown>;
   try {
-    hugr = await import('@runeltd/hugr' as string);
+    hugr = await import('@runeltd/hugr');
   } catch {
     return NextResponse.json({ error: 'hugr is not installed. Run: npm link @runeltd/hugr' }, { status: 500 });
   }
@@ -137,9 +137,10 @@ export async function POST(req: NextRequest) {
         id: step.agentId,
         agentConfig: {
           name: customWorker.name,
-          description: customWorker.description,
-          systemPrompt: customWorker.systemPrompt,
-          tools: customWorker.tools,
+          instructions: customWorker.systemPrompt || '',
+          toolAccess: 'full',
+          allowedTools: customWorker.tools,
+          selfReview: customWorker.selfReview,
         },
         joblog,
         runtime,
@@ -214,11 +215,6 @@ export async function POST(req: NextRequest) {
   });
 
   (async () => {
-    const originalLog = console.log;
-    const originalWarn = console.warn;
-    console.log = () => {};
-    console.warn = () => {};
-
     try {
       await manager.startSession({
         task,
@@ -243,9 +239,6 @@ export async function POST(req: NextRequest) {
       }
       saveDashboardState(fresh);
       clearActiveSession();
-    } finally {
-      console.log = originalLog;
-      console.warn = originalWarn;
     }
   })();
 
