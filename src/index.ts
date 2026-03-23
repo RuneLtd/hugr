@@ -154,7 +154,47 @@ export { createXAIToolRegistry } from './tools/xai.js';
 export { createGroqToolRegistry } from './tools/groq.js';
 export { createBedrockToolRegistry } from './tools/bedrock.js';
 
-export type { HugrEvents, AgentActivityEvent, ClarificationEvent } from './events/types.js';
+export type { HugrEvents, AgentActivityEvent, ClarificationEvent, TriggerFiredEvent } from './events/types.js';
 export { TypedEmitter } from './events/emitter.js';
 
 export type { HugrPlugin, PluginContext } from './plugin/types.js';
+
+export type {
+    TriggerType as TriggerConfigType,
+    TriggerStatus,
+    TriggerConfig,
+    WebhookTriggerConfig,
+    PollTriggerConfig,
+    WatchTriggerConfig,
+    TriggerEvent,
+    TriggerState,
+    TriggerHandler,
+    TriggerCallback,
+    TriggerEngineConfig,
+    TemplateCategory,
+    TriggerTemplate,
+} from './triggers/index.js';
+export {
+    TriggerEngine,
+    interpolateTemplate,
+    CronTrigger,
+    parseCron,
+    matchesCron,
+    nextCronMatch,
+    describeCron,
+    WebhookServer,
+    WebhookTrigger,
+    PollTrigger,
+    WatchTrigger,
+    getTemplate,
+    listTemplates,
+    listTemplatesByCategory,
+    getCategories,
+    createTriggerFromTemplate,
+} from './triggers/index.js';
+
+export type {
+    TriggerType as SchemaTriggerType,
+    TriggerDefinition,
+    TriggersConfig,
+} from './config/schema.js';

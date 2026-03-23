@@ -116,6 +116,60 @@ export interface PipelineConfig {
   description?: string;
 }
 
+export type TriggerType = 'cron' | 'webhook' | 'poll' | 'watch';
+
+export interface TriggerDefinition {
+  id: string;
+  type: TriggerType;
+  enabled?: boolean;
+  pipeline?: string;
+  task: string;
+  template?: string;
+
+  projectPath?: string;
+  autonomy?: AutonomyLevel;
+  maxConcurrent?: number;
+  cooldown?: number;
+
+  cron?: string;
+
+  webhook?: {
+    path: string;
+    secret?: string;
+    method?: 'POST' | 'GET' | 'PUT';
+    transform?: Record<string, string>;
+  };
+
+  poll?: {
+    url: string;
+    interval: number;
+    headers?: Record<string, string>;
+    method?: 'GET' | 'POST';
+    body?: string;
+    jq?: string;
+    dedup?: boolean;
+    dedupKey?: string;
+  };
+
+  watch?: {
+    path: string;
+    pattern?: string;
+    events?: Array<'create' | 'modify' | 'delete'>;
+    recursive?: boolean;
+    debounce?: number;
+  };
+
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface TriggersConfig {
+  enabled?: boolean;
+  webhookPort?: number;
+  webhookHost?: string;
+  triggers: TriggerDefinition[];
+}
+
 export interface HugrConfig {
   preset: PresetName;
   autonomy: AutonomyConfig;
@@ -127,6 +181,8 @@ export interface HugrConfig {
   raven: RavenPresetConfig;
 
   pipeline?: PipelineConfig;
+
+  triggers?: TriggersConfig;
 }
 
 export type PartialHugrConfig = {
@@ -137,6 +193,7 @@ export type PartialHugrConfig = {
   architect?: Partial<ArchitectConfig>;
   raven?: Partial<RavenPresetConfig>;
   pipeline?: PipelineConfig;
+  triggers?: Partial<TriggersConfig>;
 };
 
 export type IsolationMode = 'full' | 'lightweight' | 'none' | (string & {});

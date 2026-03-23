@@ -35,6 +35,11 @@ export interface HugrEvents {
         agentId?: string;
         agentName?: string;
     }) => void;
+
+    'trigger:fired': (data: TriggerFiredEvent) => void;
+    'trigger:error': (data: { triggerId: string; error: string }) => void;
+    'trigger:started': (data: { triggerId: string; type: string }) => void;
+    'trigger:stopped': (data: { triggerId: string }) => void;
 }
 
 export interface AgentActivityEvent {
@@ -47,6 +52,15 @@ export interface AgentActivityEvent {
     jobId?: string;
     iteration?: number;
     tokenUsage?: { input: number; output: number };
+}
+
+export interface TriggerFiredEvent {
+    triggerId: string;
+    triggerType: string;
+    task: string;
+    payload: Record<string, unknown>;
+    sessionId?: string;
+    timestamp: Date;
 }
 
 export interface ClarificationEvent {

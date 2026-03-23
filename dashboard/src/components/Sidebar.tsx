@@ -11,11 +11,13 @@ import {
   History,
   Bot,
   Settings,
+  Zap,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
   { href: '/workflows', label: 'Workflows', icon: GitBranch },
+  { href: '/triggers', label: 'Triggers', icon: Zap },
   { href: '/sessions', label: 'Sessions', icon: Play },
   { href: '/sessions/history', label: 'History', icon: History },
   { href: '/workers', label: 'Workers', icon: Bot },

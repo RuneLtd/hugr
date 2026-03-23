@@ -36,10 +36,23 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
   },
   {
+    id: 'template-deep-review',
+    name: 'Deep Review',
+    category: 'Development',
+    description: 'Thorough planning, implementation, and heavy refinement for critical work.',
+    steps: [
+      { agentId: 'architect', enabled: true },
+      { agentId: 'coder', enabled: true },
+      { agentId: 'raven', enabled: true, iterations: 5 },
+      { agentId: 'reviewer', enabled: true },
+    ],
+  },
+
+  {
     id: 'template-content-pipeline',
     name: 'Content Pipeline',
-    category: 'Content',
-    description: 'Plan content, generate a draft, refine through iterations, then validate quality.',
+    category: 'Content & Writing',
+    description: 'Research a topic, draft content, refine through iterations, then validate quality.',
     steps: [
       { agentId: 'planner', enabled: true },
       { agentId: 'executor', enabled: true },
@@ -48,16 +61,88 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
   },
   {
+    id: 'template-blog-writer',
+    name: 'Blog Post Writer',
+    category: 'Content & Writing',
+    description: 'Plan structure, write a full draft, iterate on quality, then do a final editorial pass.',
+    steps: [
+      { agentId: 'planner', enabled: true },
+      { agentId: 'executor', enabled: true },
+      { agentId: 'raven', enabled: true, iterations: 2 },
+      { agentId: 'reviewer', enabled: true },
+    ],
+  },
+  {
+    id: 'template-newsletter',
+    name: 'Newsletter Generator',
+    category: 'Content & Writing',
+    description: 'Gather recent highlights, compose a newsletter draft, and review for tone and accuracy.',
+    steps: [
+      { agentId: 'aggregator', enabled: true },
+      { agentId: 'executor', enabled: true },
+      { agentId: 'reviewer', enabled: true },
+    ],
+  },
+
+  {
     id: 'template-research-summarise',
     name: 'Research & Summarise',
-    category: 'Research',
-    description: 'Gather information, process it, and produce a validated summary.',
+    category: 'Research & Analysis',
+    description: 'Gather information from multiple sources, synthesise findings, and produce a validated report.',
     steps: [
       { agentId: 'executor', enabled: true },
       { agentId: 'aggregator', enabled: true },
       { agentId: 'reviewer', enabled: true },
     ],
   },
+  {
+    id: 'template-competitive-intel',
+    name: 'Competitive Intelligence',
+    category: 'Research & Analysis',
+    description: 'Research competitors, analyse their positioning, and produce a comparative brief.',
+    steps: [
+      { agentId: 'planner', enabled: true },
+      { agentId: 'executor', enabled: true },
+      { agentId: 'aggregator', enabled: true },
+      { agentId: 'validator', enabled: true },
+    ],
+  },
+  {
+    id: 'template-market-scan',
+    name: 'Market Scan',
+    category: 'Research & Analysis',
+    description: 'Scan for market trends, aggregate findings, and produce an executive-ready report.',
+    steps: [
+      { agentId: 'executor', enabled: true },
+      { agentId: 'aggregator', enabled: true },
+      { agentId: 'raven', enabled: true, iterations: 2 },
+      { agentId: 'reviewer', enabled: true },
+    ],
+  },
+
+  {
+    id: 'template-data-processing',
+    name: 'Data Processing',
+    category: 'Data & ETL',
+    description: 'Plan the extraction, execute the transformation, validate the output.',
+    steps: [
+      { agentId: 'planner', enabled: true },
+      { agentId: 'executor', enabled: true },
+      { agentId: 'validator', enabled: true, iterations: 2 },
+    ],
+  },
+  {
+    id: 'template-data-cleanup',
+    name: 'Data Cleanup',
+    category: 'Data & ETL',
+    description: 'Analyse messy data, clean and normalise it, then validate quality.',
+    steps: [
+      { agentId: 'executor', enabled: true },
+      { agentId: 'raven', enabled: true, iterations: 2 },
+      { agentId: 'validator', enabled: true },
+    ],
+  },
+
   {
     id: 'template-classify-route',
     name: 'Classify & Route',
@@ -70,18 +155,32 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
   },
   {
-    id: 'template-data-processing',
-    name: 'Data Processing',
-    category: 'Data',
-    description: 'Plan the extraction, execute the transformation, validate the output.',
+    id: 'template-multi-step-automation',
+    name: 'Multi-Step Automation',
+    category: 'Operations',
+    description: 'Decompose a complex objective, execute each step, aggregate results, and validate.',
     steps: [
       { agentId: 'planner', enabled: true },
+      { agentId: 'router', enabled: true },
       { agentId: 'executor', enabled: true },
-      { agentId: 'validator', enabled: true, iterations: 2 },
+      { agentId: 'aggregator', enabled: true },
+      { agentId: 'validator', enabled: true },
     ],
   },
   {
-    id: 'template-review-only',
+    id: 'template-inbox-processor',
+    name: 'Inbox Processor',
+    category: 'Operations',
+    description: 'Classify incoming messages or files, extract action items, and produce a structured summary.',
+    steps: [
+      { agentId: 'router', enabled: true },
+      { agentId: 'executor', enabled: true },
+      { agentId: 'aggregator', enabled: true },
+    ],
+  },
+
+  {
+    id: 'template-quality-review',
     name: 'Quality Review',
     category: 'General',
     description: 'Run multiple review iterations on existing work without making changes.',
@@ -100,28 +199,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
   },
   {
-    id: 'template-multi-step-automation',
-    name: 'Multi-Step Automation',
-    category: 'Operations',
-    description: 'Decompose a complex objective, execute each step, aggregate results, and validate.',
+    id: 'template-brainstorm',
+    name: 'Brainstorm & Validate',
+    category: 'General',
+    description: 'Generate ideas, explore variations, and validate the best options.',
     steps: [
       { agentId: 'planner', enabled: true },
-      { agentId: 'router', enabled: true },
-      { agentId: 'executor', enabled: true },
-      { agentId: 'aggregator', enabled: true },
+      { agentId: 'raven', enabled: true, iterations: 3 },
       { agentId: 'validator', enabled: true },
-    ],
-  },
-  {
-    id: 'template-deep-review',
-    name: 'Deep Review',
-    category: 'Development',
-    description: 'Thorough planning, implementation, and heavy refinement for critical work.',
-    steps: [
-      { agentId: 'architect', enabled: true },
-      { agentId: 'coder', enabled: true },
-      { agentId: 'raven', enabled: true, iterations: 5 },
-      { agentId: 'reviewer', enabled: true },
     ],
   },
 ];

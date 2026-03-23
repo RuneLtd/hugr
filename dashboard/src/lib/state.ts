@@ -88,12 +88,29 @@ export interface CustomAgentRecord {
   createdAt?: string;
 }
 
+export interface TriggerRecord {
+  id: string;
+  type: string;
+  enabled: boolean;
+  task: string;
+  pipeline?: string;
+  projectPath?: string;
+  maxConcurrent?: number;
+  cooldown?: number;
+  cron?: string;
+  webhook?: { path: string; secret?: string; method?: string };
+  poll?: { url: string; interval: number; headers?: Record<string, string>; jq?: string; dedup?: boolean; dedupKey?: string };
+  watch?: { path: string; pattern?: string; events?: string[]; debounce?: number };
+  tags?: string[];
+}
+
 export interface DashboardState {
   pipelines: SavedPipeline[];
   sessions: SessionRecord[];
   activities: Record<string, ActivityRecord[]>;
   customAgents: CustomAgentRecord[];
   providerKeys: Record<string, { key: string; updatedAt: string }>;
+  triggers: TriggerRecord[];
 }
 
 const DEFAULT_STATE: DashboardState = {
@@ -102,6 +119,7 @@ const DEFAULT_STATE: DashboardState = {
   activities: {},
   customAgents: [],
   providerKeys: {},
+  triggers: [],
 };
 
 export function getDashboardState(): DashboardState {
