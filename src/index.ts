@@ -191,7 +191,10 @@ export {
     listTemplatesByCategory,
     getCategories,
     createTriggerFromTemplate,
+    pipelineFromTemplate,
 } from './triggers/index.js';
+
+export { TriggerRunner, type TriggerRunnerConfig, type TriggerSession } from './triggers/index.js';
 
 export type {
     TriggerType as SchemaTriggerType,
